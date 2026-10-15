@@ -191,7 +191,8 @@ export const clientsService = {
   getServices: (id) => api.get(`/clients/${id}/services`),
   createService: (id, data) => api.post(`/clients/${id}/services`, data),
   updateService: (id, serviceId, data) => api.put(`/clients/${id}/services/${serviceId}`, data),
-  bundleServices: (id, data) => api.post(`/clients/${id}/services`, data)
+  bundleServices: (id, data) => api.post(`/clients/${id}/services`, data),
+  setPortalCredentials: (id, data) => api.post(`/clients/${id}/portal-account`, data)
 };
 
 export const clientService = clientsService;

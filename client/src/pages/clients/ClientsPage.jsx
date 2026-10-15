@@ -28,7 +28,13 @@ import {
   ArrowUpDown,
   Phone,
   Mail,
-  CheckSquare
+  CheckSquare,
+  Key,
+  Eye,
+  EyeOff,
+  Copy,
+  Check,
+  ShieldCheck
 } from 'lucide-react';
 
 const LIFECYCLE_OPTIONS = [
@@ -107,8 +113,29 @@ export function ClientsPage() {
       designation: '',
       email: '',
       phone: ''
-    }
+    },
+    createPortalLogin: true,
+    portalEmail: '',
+    portalPassword: '',
+    showPassword: false
   });
+
+  // Credentials dialog & existing client portal modal
+  const [createdCredentialsModal, setCreatedCredentialsModal] = useState(null);
+  const [copiedCredentials, setCopiedCredentials] = useState(false);
+  const [portalModalOpen, setPortalModalOpen] = useState(false);
+  const [portalClientTarget, setPortalClientTarget] = useState(null);
+  const [portalForm, setPortalForm] = useState({ email: '', password: '', showPassword: false });
+  const [isSavingPortal, setIsSavingPortal] = useState(false);
+
+  const generateRandomPassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$';
+    let pass = 'Client@';
+    for (let i = 0; i < 4; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return pass;
+  };
 
   const [accountManagers, setAccountManagers] = useState([]);
   const [isCreatingClient, setIsCreatingClient] = useState(false);
@@ -246,12 +273,27 @@ export function ClientsPage() {
       const payload = {
         ...newClientForm,
         accountManagerId: newClientForm.accountManagerId ? Number(newClientForm.accountManagerId) : null,
-        primaryContact: newClientForm.primaryContact.name ? newClientForm.primaryContact : undefined
+        primaryContact: newClientForm.primaryContact.name ? newClientForm.primaryContact : undefined,
+        createPortalLogin: newClientForm.createPortalLogin,
+        portalEmail: newClientForm.portalEmail ? newClientForm.portalEmail.trim() : (newClientForm.primaryContact.email || newClientForm.email),
+        portalPassword: newClientForm.portalPassword ? newClientForm.portalPassword.trim() : (newClientForm.createPortalLogin ? generateRandomPassword() : null)
       };
-      await clientsService.createClient(payload);
-      setNotice(`Client "${newClientForm.name}" created successfully!`);
+      const res = await clientsService.createClient(payload);
+      const created = res.data?.client;
+
+      setNotice(`Client "${newClientForm.name}" registered successfully!`);
       setTimeout(() => setNotice(''), 4500);
       setNewClientModalOpen(false);
+
+      if (created?.portalAccount) {
+        setCreatedCredentialsModal({
+          clientName: created.name,
+          email: created.portalAccount.email,
+          password: created.portalAccount.password,
+          loginUrl: window.location.origin + '/login'
+        });
+      }
+
       setNewClientForm({
         name: '',
         clientCode: '',
@@ -268,7 +310,11 @@ export function ClientsPage() {
         lifecycleStage: 'onboarding',
         accountManagerId: '',
         requirementsNotes: '',
-        primaryContact: { name: '', designation: '', email: '', phone: '' }
+        primaryContact: { name: '', designation: '', email: '', phone: '' },
+        createPortalLogin: true,
+        portalEmail: '',
+        portalPassword: '',
+        showPassword: false
       });
       fetchClients();
       fetchDashboardStats();
@@ -277,6 +323,42 @@ export function ClientsPage() {
       setTimeout(() => setError(''), 4500);
     } finally {
       setIsCreatingClient(false);
+    }
+  };
+
+  const handleOpenPortalModal = (client) => {
+    setPortalClientTarget(client);
+    setPortalForm({
+      email: client.primary_contact_email || client.email || '',
+      password: generateRandomPassword(),
+      showPassword: false
+    });
+    setPortalModalOpen(true);
+  };
+
+  const handleSavePortalCredentials = async (e) => {
+    e.preventDefault();
+    if (!portalClientTarget) return;
+
+    setIsSavingPortal(true);
+    try {
+      const res = await clientsService.setPortalCredentials(portalClientTarget.id, {
+        email: portalForm.email,
+        password: portalForm.password
+      });
+      setPortalModalOpen(false);
+      setCreatedCredentialsModal({
+        clientName: portalClientTarget.name,
+        email: res.data.portalAccount.email,
+        password: res.data.portalAccount.password,
+        loginUrl: window.location.origin + '/login'
+      });
+      fetchClients();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to configure portal credentials.');
+      setTimeout(() => setError(''), 4500);
+    } finally {
+      setIsSavingPortal(false);
     }
   };
 
@@ -684,6 +766,15 @@ export function ClientsPage() {
                           <Sparkles className="w-3 h-3 text-amber-500" /> Bundle
                         </button>
                       )}
+                      {canCreateClient && (
+                        <button
+                          onClick={() => handleOpenPortalModal(c)}
+                          className="px-2.5 py-1 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded font-semibold inline-flex items-center gap-1 transition"
+                          title="Configure or Reset Client Portal Login"
+                        >
+                          <Key className="w-3 h-3 text-emerald-600" /> Login
+                        </button>
+                      )}
                       <Link
                         to={`/clients/${c.id}`}
                         className="px-2.5 py-1 text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 rounded font-semibold inline-flex items-center gap-1 transition"
@@ -899,6 +990,80 @@ export function ClientsPage() {
                 </div>
               </div>
 
+              {/* Client Portal Login Credentials */}
+              <div className="space-y-3 border-t pt-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Key className="w-4 h-4 text-emerald-600" />
+                    <span className="font-bold uppercase tracking-wider text-slate-700 text-[10px]">
+                      Client Portal Login Access
+                    </span>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 select-none">
+                    <input
+                      type="checkbox"
+                      checked={newClientForm.createPortalLogin}
+                      onChange={(e) => setNewClientForm({ ...newClientForm, createPortalLogin: e.target.checked })}
+                      className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                    />
+                    Enable Client Login
+                  </label>
+                </div>
+
+                {newClientForm.createPortalLogin && (
+                  <div className="space-y-2.5 pt-1">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block font-medium text-slate-700 mb-1">Login Email *</label>
+                        <input
+                          type="email"
+                          required={newClientForm.createPortalLogin}
+                          placeholder={newClientForm.email || 'client@company.com'}
+                          value={newClientForm.portalEmail}
+                          onChange={(e) => setNewClientForm({ ...newClientForm, portalEmail: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg bg-white"
+                        />
+                        <span className="text-[10px] text-slate-400 mt-0.5 block">Defaults to primary contact email if empty</span>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-medium text-slate-700">Password *</label>
+                          <button
+                            type="button"
+                            onClick={() => setNewClientForm({ ...newClientForm, portalPassword: generateRandomPassword() })}
+                            className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1"
+                          >
+                            <Sparkles className="w-3 h-3 text-amber-500" />
+                            Generate
+                          </button>
+                        </div>
+                        <div className="relative">
+                          <input
+                            type={newClientForm.showPassword ? 'text' : 'password'}
+                            required={newClientForm.createPortalLogin}
+                            placeholder="Set client password"
+                            value={newClientForm.portalPassword}
+                            onChange={(e) => setNewClientForm({ ...newClientForm, portalPassword: e.target.value })}
+                            className="w-full pl-3 pr-10 py-2 border rounded-lg bg-white font-mono text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setNewClientForm({ ...newClientForm, showPassword: !newClientForm.showPassword })}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                          >
+                            {newClientForm.showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-emerald-700 bg-emerald-50/80 border border-emerald-100 rounded-lg p-2 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                      Client can sign in at <strong className="font-mono text-emerald-800">/login</strong> to review deliverables, pay invoices, raise tickets & submit shared credentials.
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* Operational Requirements Section */}
               <div className="space-y-2 border-t pt-3">
                 <span className="font-bold uppercase tracking-wider text-slate-400 text-[10px]">Operational Requirements</span>
@@ -1002,6 +1167,159 @@ export function ClientsPage() {
                     {isBundling ? 'Bundling...' : 'Confirm Bundling'}
                   </button>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Client Credentials Success Modal */}
+      {createdCredentialsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-emerald-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                <Key className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-bold text-slate-900 text-base">Client Portal Login Ready</h3>
+                <p className="text-xs text-slate-500 truncate">Account credentials for {createdCredentialsModal.clientName}</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5 text-xs">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Portal Login URL</span>
+                <a
+                  href={createdCredentialsModal.loginUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-mono text-blue-600 hover:underline flex items-center gap-1 font-semibold"
+                >
+                  {createdCredentialsModal.loginUrl}
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Email (Username)</span>
+                <span className="font-mono text-slate-800 bg-white border border-slate-200 px-2 py-1 rounded block select-all">
+                  {createdCredentialsModal.email}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Password</span>
+                <span className="font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded block select-all">
+                  {createdCredentialsModal.password}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const credsText = `D-GROW CRM Client Portal Access\nClient: ${createdCredentialsModal.clientName}\nPortal URL: ${createdCredentialsModal.loginUrl}\nEmail: ${createdCredentialsModal.email}\nPassword: ${createdCredentialsModal.password}`;
+                  navigator.clipboard.writeText(credsText);
+                  setCopiedCredentials(true);
+                  setTimeout(() => setCopiedCredentials(false), 3000);
+                }}
+                className={`flex-1 py-2 rounded-lg font-semibold text-xs flex items-center justify-center gap-1.5 transition ${
+                  copiedCredentials
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                }`}
+              >
+                {copiedCredentials ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedCredentials ? 'Copied to Clipboard!' : 'Copy Credentials'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreatedCredentialsModal(null)}
+                className="px-4 py-2 border rounded-lg text-slate-600 hover:bg-slate-50 font-medium text-xs"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Existing Client Portal Modal */}
+      {portalModalOpen && portalClientTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <Key className="w-5 h-5 text-emerald-600" />
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Client Portal Login</h3>
+                  <p className="text-xs text-slate-500">{portalClientTarget.name}</p>
+                </div>
+              </div>
+              <button onClick={() => setPortalModalOpen(false)}>
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePortalCredentials} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">Login Email *</label>
+                <input
+                  type="email"
+                  required
+                  value={portalForm.email}
+                  onChange={(e) => setPortalForm({ ...portalForm, email: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg bg-white"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-medium text-slate-700">Password *</label>
+                  <button
+                    type="button"
+                    onClick={() => setPortalForm({ ...portalForm, password: generateRandomPassword() })}
+                    className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1"
+                  >
+                    <Sparkles className="w-3 h-3 text-amber-500" />
+                    Generate New
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={portalForm.showPassword ? 'text' : 'password'}
+                    required
+                    value={portalForm.password}
+                    onChange={(e) => setPortalForm({ ...portalForm, password: e.target.value })}
+                    className="w-full pl-3 pr-10 py-2 border rounded-lg bg-white font-mono text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPortalForm({ ...portalForm, showPassword: !portalForm.showPassword })}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {portalForm.showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setPortalModalOpen(false)}
+                  className="px-3.5 py-2 border rounded-lg text-slate-600 hover:bg-slate-50 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingPortal}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium disabled:opacity-50"
+                >
+                  {isSavingPortal ? 'Saving...' : 'Save & Set Login'}
+                </button>
               </div>
             </form>
           </div>

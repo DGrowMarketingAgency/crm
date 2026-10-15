@@ -69,6 +69,20 @@ export class ClientsController {
     }
   }
 
+  static async setPortalCredentials(req, res, next) {
+    try {
+      const result = await ClientsService.createOrResetPortalAccount(
+        Number(req.params.id),
+        req.body,
+        req.user,
+        req
+      );
+      res.json({ message: 'Client portal credentials configured successfully', ...result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async updateClient(req, res, next) {
     try {
       const client = await ClientsService.updateClient(Number(req.params.id), req.body, req.user, req);

@@ -2,6 +2,8 @@ import { pool } from '../../config/db.js';
 import { AuditService } from '../audit/audit.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { WorkflowEngineService } from '../automation/workflow-engine.service.js';
+import bcrypt from 'bcrypt';
+
 
 export const LIFECYCLE_STAGES = [
   { stage: 'lead', label: 'Lead / Opportunity', owner: 'BD Executive', exitCriteria: 'Lead qualified with budget and scope alignment.' },
@@ -476,11 +478,15 @@ export class ClientsService {
       contractEndDate = null,
       status = 'active',
       userId = null,
-      primaryContact = null
+      primaryContact = null,
+      createPortalLogin = true,
+      portalPassword = null,
+      portalEmail = null
     } = data;
 
     const trimmedEmail = email.trim().toLowerCase();
     const trimmedName = name.trim();
+
 
     // Check unique email
     const [existingEmail] = await pool.query('SELECT id FROM clients WHERE email = ?', [trimmedEmail]);
@@ -578,6 +584,60 @@ export class ClientsService {
       [newClientId, contactName, contactDesignation, contactEmail, contactPhone, userId || null]
     );
 
+    // Auto-create client portal user account if requested or password provided
+    let portalAccountCreated = null;
+    const wantsPortal = createPortalLogin !== false && (portalPassword || createPortalLogin);
+
+    if (wantsPortal) {
+      const loginEmail = (portalEmail || contactEmail || trimmedEmail).trim().toLowerCase();
+      const rawPassword = portalPassword?.trim() || `Client@${Math.floor(1000 + Math.random() * 9000)}`;
+
+      // Check if user already exists
+      const [existingUser] = await pool.query('SELECT id, role, client_id FROM users WHERE email = ?', [loginEmail]);
+
+      let finalUserId = null;
+
+      if (existingUser.length > 0) {
+        const u = existingUser[0];
+        const passwordHash = await bcrypt.hash(rawPassword, 10);
+        await pool.query(
+          `UPDATE users 
+           SET client_id = ?, password_hash = ?, status = 'active', role = 'client' 
+           WHERE id = ?`,
+          [newClientId, passwordHash, u.id]
+        );
+        finalUserId = u.id;
+      } else {
+        const passwordHash = await bcrypt.hash(rawPassword, 10);
+        const [userInsert] = await pool.query(
+          `INSERT INTO users (name, email, password_hash, role, client_id, status, must_change_password)
+           VALUES (?, ?, ?, 'client', ?, 'active', FALSE)`,
+          [contactName || trimmedName, loginEmail, passwordHash, newClientId]
+        );
+        finalUserId = userInsert.insertId;
+
+        // Assign 'client' role in user_roles
+        const [clientRole] = await pool.query("SELECT id FROM roles WHERE slug = 'client'");
+        if (clientRole.length > 0) {
+          await pool.query(
+            "INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)",
+            [finalUserId, clientRole[0].id]
+          );
+        }
+      }
+
+      // Link client & contact to this portal user
+      await pool.query('UPDATE clients SET user_id = ? WHERE id = ?', [finalUserId, newClientId]);
+      await pool.query('UPDATE client_contacts SET user_id = ? WHERE client_id = ? AND is_primary = TRUE', [finalUserId, newClientId]);
+
+      portalAccountCreated = {
+        userId: finalUserId,
+        email: loginEmail,
+        password: rawPassword,
+        role: 'client'
+      };
+    }
+
     // Initialize onboarding checklist
     await this.initializeOnboardingChecklist(newClientId, onboardingOwnerId || accountManagerId || actorUser.id);
 
@@ -597,7 +657,7 @@ export class ClientsService {
       'client_created',
       'Client Created',
       `Client record created with code ${finalCode} by ${actorUser.name || 'User'}`,
-      { clientCode: finalCode, lifecycleStage, accountManagerId }
+      { clientCode: finalCode, lifecycleStage, accountManagerId, hasPortalLogin: !!portalAccountCreated }
     );
 
     await AuditService.log({
@@ -605,12 +665,86 @@ export class ClientsService {
       action: 'client.created',
       targetType: 'client',
       targetId: newClientId,
-      details: { name: trimmedName, clientCode: finalCode, email: trimmedEmail, entity, vertical, lifecycleStage },
+      details: { 
+        name: trimmedName, 
+        clientCode: finalCode, 
+        email: trimmedEmail, 
+        entity, 
+        vertical, 
+        lifecycleStage,
+        portalLoginCreated: !!portalAccountCreated 
+      },
       req
     });
 
-    return this.getClientById(newClientId);
+    const clientRecord = await this.getClientById(newClientId);
+    return {
+      ...clientRecord,
+      portalAccount: portalAccountCreated
+    };
   }
+
+  /**
+   * Creates or resets client portal login credentials
+   */
+  static async createOrResetPortalAccount(clientId, data, actorUser, req = null) {
+    const client = await this.getClientById(clientId, actorUser);
+    const { email: customEmail, password } = data;
+    const loginEmail = (customEmail || client.email).trim().toLowerCase();
+    const rawPassword = password?.trim() || `Client@${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const [existingUser] = await pool.query('SELECT id, role, client_id FROM users WHERE email = ?', [loginEmail]);
+    let finalUserId = null;
+    const passwordHash = await bcrypt.hash(rawPassword, 10);
+
+    if (existingUser.length > 0) {
+      finalUserId = existingUser[0].id;
+      await pool.query(
+        `UPDATE users 
+         SET client_id = ?, password_hash = ?, status = 'active', role = 'client' 
+         WHERE id = ?`,
+        [clientId, passwordHash, finalUserId]
+      );
+    } else {
+      const [insertRes] = await pool.query(
+        `INSERT INTO users (name, email, password_hash, role, client_id, status, must_change_password)
+         VALUES (?, ?, ?, 'client', ?, 'active', FALSE)`,
+        [client.name, loginEmail, passwordHash, clientId]
+      );
+      finalUserId = insertRes.insertId;
+
+      const [clientRole] = await pool.query("SELECT id FROM roles WHERE slug = 'client'");
+      if (clientRole.length > 0) {
+        await pool.query(
+          "INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)",
+          [finalUserId, clientRole[0].id]
+        );
+      }
+    }
+
+    await pool.query('UPDATE clients SET user_id = ? WHERE id = ?', [finalUserId, clientId]);
+    await pool.query('UPDATE client_contacts SET user_id = ? WHERE client_id = ? AND is_primary = TRUE', [finalUserId, clientId]);
+
+    await AuditService.log({
+      actorUserId: actorUser.id,
+      action: 'client.portal_credentials_set',
+      targetType: 'client',
+      targetId: clientId,
+      details: { email: loginEmail },
+      req
+    });
+
+    return {
+      success: true,
+      portalAccount: {
+        userId: finalUserId,
+        email: loginEmail,
+        password: rawPassword,
+        role: 'client'
+      }
+    };
+  }
+
 
   /**
    * Updates an existing client profile

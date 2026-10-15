@@ -10,7 +10,8 @@ import {
   onboardingItemSchema,
   updateOnboardingItemSchema,
   createClientServiceSchema,
-  updateClientServiceSchema
+  updateClientServiceSchema,
+  createOrResetPortalAccountSchema
 } from './clients.validation.js';
 import { authenticate } from '../../middleware/authenticate.js';
 import { requirePermission } from '../../middleware/authorize.js';
@@ -76,6 +77,15 @@ router.delete(
   csrfProtection,
   ClientsController.deleteClient
 );
+
+router.post(
+  '/clients/:id/portal-account',
+  requirePermission('clients.update'),
+  csrfProtection,
+  validate(createOrResetPortalAccountSchema),
+  ClientsController.setPortalCredentials
+);
+
 
 // 4. Client Detail Workspace (11 Sections Aggregated)
 router.get(

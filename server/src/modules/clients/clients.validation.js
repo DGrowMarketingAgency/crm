@@ -33,6 +33,9 @@ export const createClientSchema = z.object({
   contractEndDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD').optional().nullable(),
   status: STATUS_ENUM.default('active'),
   userId: z.number().int().positive().optional().nullable(),
+  createPortalLogin: z.boolean().optional(),
+  portalEmail: z.string().email().max(255).optional().nullable(),
+  portalPassword: z.string().min(6, 'Portal password must be at least 6 characters').max(100).optional().nullable(),
   primaryContact: z.object({
     name: z.string().min(2).max(255),
     designation: z.string().max(150).optional().nullable(),
@@ -40,6 +43,12 @@ export const createClientSchema = z.object({
     phone: z.string().max(50).optional().nullable()
   }).optional()
 });
+
+export const createOrResetPortalAccountSchema = z.object({
+  email: z.string().email().max(255).optional().nullable(),
+  password: z.string().min(6, 'Password must be at least 6 characters').max(100)
+});
+
 
 export const updateClientSchema = z.object({
   name: z.string().min(2).max(255).optional(),
