@@ -16,7 +16,8 @@ import {
   CreditCard,
   MessageSquare,
   Briefcase,
-  Calendar
+  Calendar,
+  Key
 } from 'lucide-react';
 import {
   DashboardSquare01Icon,
@@ -37,9 +38,17 @@ import {
 
 export function DashboardLayout() {
   const { user, logout } = useAuth();
-  const { hasPermission, roles } = usePermission();
+  const { hasPermission, roles, isOwner } = usePermission();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const isClientUser = Boolean(user?.client_id) || (roles || []).some((r) => r.slug === 'client');
+  const isAdminUser =
+    isOwner ||
+    (roles || []).some((r) => r.slug === 'owner' || r.slug === 'admin') ||
+    hasPermission('credentials.manage') ||
+    hasPermission('credentials.view_all');
+
   const [profileOpen, setProfileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
@@ -84,6 +93,9 @@ export function DashboardLayout() {
     if (path.startsWith('/notifications')) return '/notifications';
     if (path.startsWith('/chat')) return '/chat';
     if (path.startsWith('/hr')) return '/hr';
+    if (path.startsWith('/password-manager')) return '/password-manager';
+    if (path.startsWith('/shared-credentials')) return '/shared-credentials';
+    if (path.startsWith('/authorized-credentials')) return '/authorized-credentials';
     return '/dashboard';
   };
 
@@ -184,14 +196,28 @@ export function DashboardLayout() {
           value: '/hr',
           label: 'HR & Workforce',
           icon: Briefcase
+        },
+        (!isClientUser && hasPermission('credentials.employee_view') && !isAdminUser) && {
+          value: '/authorized-credentials',
+          label: 'Authorized Client Credentials',
+          icon: Key
         }
       ].filter(Boolean)
     },
-    hasPermission('roles.view') && {
+    // Admin / Leadership Account & Security
+    (!isClientUser && (isAdminUser || hasPermission('roles.view'))) && {
       label: 'Account & Security',
       children: [
-        { value: '/roles', label: 'Roles & Permissions', icon: Shield01Icon },
-        { value: '/audit-logs', label: 'Activity & Audit', icon: Activity01Icon }
+        isAdminUser && { value: '/password-manager', label: 'Password Manager', icon: Key },
+        hasPermission('roles.view') && { value: '/roles', label: 'Roles & Permissions', icon: Shield01Icon },
+        hasPermission('roles.view') && { value: '/audit-logs', label: 'Activity & Audit', icon: Activity01Icon }
+      ].filter(Boolean)
+    },
+    // Client Portal Account & Security
+    isClientUser && {
+      label: 'Account & Security',
+      children: [
+        { value: '/shared-credentials', label: 'Shared Credentials', icon: Key }
       ].filter(Boolean)
     }
   ]

@@ -32,6 +32,7 @@ import { BillingPage } from '../pages/billing/BillingPage';
 import { ChatPage } from '../pages/chat/ChatPage';
 import { HRHubPage } from '../pages/hr/HRHubPage';
 import { CalendarPage } from '../pages/calendar/CalendarPage';
+import { PasswordManagerPage } from '../pages/credentials/PasswordManagerPage';
 
 export function AppRoutes() {
   return (
@@ -141,6 +142,14 @@ export function AppRoutes() {
           <Route element={<PermissionRoute requiredPermission="roles.view" />}>
             <Route path="/roles" element={<RolesPage />} />
             <Route path="/audit-logs" element={<AuditLogsPage />} />
+          </Route>
+
+          {/* D-Grow OS: Secure Client Password Manager & Credential Access Control */}
+          <Route element={<PermissionRoute requiredAny={['credentials.view_all', 'credentials.manage', 'credentials.client_access', 'credentials.employee_view']} />}>
+            <Route path="/password-manager" element={<PasswordManagerPage />} />
+            <Route path="/shared-credentials" element={<PasswordManagerPage />} />
+            <Route path="/authorized-credentials" element={<PasswordManagerPage />} />
+            <Route path="/credentials" element={<PasswordManagerPage />} />
           </Route>
 
           <Route path="/unauthorized" element={<AccessDeniedPage />} />

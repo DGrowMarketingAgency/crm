@@ -187,6 +187,8 @@ export const clientsService = {
   bundleServices: (id, data) => api.post(`/clients/${id}/services`, data)
 };
 
+export const clientService = clientsService;
+
 export const projectsService = {
   getProjects: (params) => api.get('/projects', { params }),
   getMetrics: () => api.get('/projects/metrics'),
@@ -472,6 +474,21 @@ export const calendarService = {
   updateEvent: (id, data) => api.put(`/calendar/${id}`, data),
   deleteEvent: (id, params) => api.delete(`/calendar/${id}`, { params }),
   publishEvent: (id, data) => api.post(`/calendar/${id}/publish`, data)
+};
+
+export const credentialsService = {
+  getCredentials: (params) => api.get('/credentials', { params }),
+  getCredentialDetails: (id) => api.get(`/credentials/${id}`),
+  createCredential: (data) => api.post('/credentials', data),
+  updateCredential: (id, data) => api.put(`/credentials/${id}`, data),
+  revealCredential: (id) => api.post(`/credentials/${id}/reveal`),
+  grantAccess: (id, data) => api.post(`/credentials/${id}/grants`, data),
+  updateGrant: (id, grantId, data) => api.patch(`/credentials/${id}/grants/${grantId}`, data),
+  revokeGrant: (id, grantId) => api.delete(`/credentials/${id}/grants/${grantId}`),
+  clientRevokeAllAccess: (id) => api.post(`/credentials/${id}/revoke-my-access`),
+  getAuditHistory: (id) => api.get(`/credentials/${id}/audit-history`),
+  archiveCredential: (id) => api.delete(`/credentials/${id}`),
+  getEligibleEmployees: () => api.get('/credentials/meta/employees')
 };
 
 export default api;

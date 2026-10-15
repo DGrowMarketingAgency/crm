@@ -16,3 +16,38 @@ export const authLimiter = rateLimit({
     }
   }
 });
+
+/**
+ * Rate limiter for sensitive credential reveal operations
+ */
+export const credentialRevealLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20, // limit each IP to 20 reveal requests per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: {
+      message: 'Rate limit exceeded for credential reveal requests. Please wait a minute before trying again.',
+      code: 'REVEAL_RATE_LIMIT_EXCEEDED'
+    }
+  }
+});
+
+/**
+ * Rate limiter for credential mutations (create, update, grant, revoke)
+ */
+export const credentialMutationLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 40, // limit each IP to 40 mutation requests per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: {
+      message: 'Too many credential operations. Please slow down.',
+      code: 'MUTATION_RATE_LIMIT_EXCEEDED'
+    }
+  }
+});
+

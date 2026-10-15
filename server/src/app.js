@@ -26,6 +26,7 @@ import billingRoutes from './modules/billing/billing.routes.js';
 import chatRoutes from './modules/chat/chat.routes.js';
 import hrRoutes from './modules/hr/hr.routes.js';
 import calendarRoutes from './modules/calendar/calendar.routes.js';
+import credentialsRoutes from './modules/credentials/credentials.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -141,6 +142,9 @@ app.use('/api', hrRoutes);
 
 // D-Grow OS: Client Monthly Content & Work Calendar
 app.use('/api/calendar', calendarRoutes);
+
+// D-Grow OS: Secure Client Password Manager & Credential Access Control
+app.use('/api', credentialsRoutes);
 
 // 404 Handler
 app.use((req, res) => {
