@@ -1,0 +1,11 @@
+{
+  "name": "agency-manager",
+  "version": "1.0.0",
+  "description": "Agency Task & Project Management System — Phase 1",
+  "scripts": {
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "test:server": "npm --prefix server test",
+    "bootstrap:owner": "npm --prefix server run bootstrap:owner"
+  }
+}
