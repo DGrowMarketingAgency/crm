@@ -10,16 +10,17 @@ export async function seedRbac(db = pool) {
   try {
     await connection.beginTransaction();
 
-    // 1. Seed Permissions idempotently
-    for (const perm of PERMISSION_REGISTRY) {
+    // 1. Seed Permissions idempotently in bulk
+    if (PERMISSION_REGISTRY.length > 0) {
+      const permValues = PERMISSION_REGISTRY.map((p) => [p.key, p.module, p.action, p.description]);
       await connection.query(
         `INSERT INTO permissions (permission_key, module, action, description)
-         VALUES (?, ?, ?, ?)
+         VALUES ?
          ON DUPLICATE KEY UPDATE
            module = VALUES(module),
            action = VALUES(action),
            description = VALUES(description)`,
-        [perm.key, perm.module, perm.action, perm.description]
+        [permValues]
       );
     }
 
@@ -29,6 +30,8 @@ export async function seedRbac(db = pool) {
     allPerms.forEach((p) => permMap.set(p.permission_key, p.id));
 
     // 3. Seed Default System Roles
+    const allRolePermInserts = [];
+
     for (const r of DEFAULT_SYSTEM_ROLES) {
       await connection.query(
         `INSERT INTO roles (name, slug, description, is_system)
@@ -53,14 +56,17 @@ export async function seedRbac(db = pool) {
           .filter(Boolean);
       }
 
-      // Associate permissions for system role idempotently
       for (const pId of targetPermIds) {
-        await connection.query(
-          `INSERT IGNORE INTO role_permissions (role_id, permission_id)
-           VALUES (?, ?)`,
-          [roleId, pId]
-        );
+        allRolePermInserts.push([roleId, pId]);
       }
+    }
+
+    // Batch insert all role_permissions in single query
+    if (allRolePermInserts.length > 0) {
+      await connection.query(
+        `INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES ?`,
+        [allRolePermInserts]
+      );
     }
 
     // 4. Ensure any existing users with role = 'owner' have Owner role assigned in user_roles

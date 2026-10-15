@@ -1,7 +1,16 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load from current working directory (e.g. repo root where cloud hosts stage .env)
 dotenv.config();
+// Fallback/load from server/.env if process started from root or parent directory
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+
 
 const envSchema = z.object({
   PORT: z.string().default('5000').transform((val) => parseInt(val, 10)),
