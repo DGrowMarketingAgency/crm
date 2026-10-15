@@ -20,7 +20,9 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   SMTP_FROM: z.string().default('noreply@agencymanager.local'),
-  SMTP_SECURE: z.string().optional().transform((val) => val === 'true')
+  SMTP_SECURE: z.string().optional().transform((val) => val === 'true'),
+  CREDENTIAL_ENCRYPTION_KEY: z.string().default('6737db207df19638815bd250c20cf3967e6852b051b5e787a6f7e2cb10123db8'),
+  CREDENTIAL_CURRENT_KEY_VERSION: z.string().default('v1')
 });
 
 const parsed = envSchema.safeParse(process.env);
