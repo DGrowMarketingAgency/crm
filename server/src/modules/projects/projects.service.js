@@ -16,12 +16,12 @@ export class ProjectsService {
       ${tableAlias}.project_manager_id = ?
       OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = ${tableAlias}.id AND pm.user_id = ?)
       OR EXISTS (SELECT 1 FROM project_teams pt JOIN team_members tm ON pt.team_id = tm.team_id WHERE pt.project_id = ${tableAlias}.id AND tm.user_id = ?)
-      OR EXISTS (SELECT 1 FROM clients c WHERE c.id = ${tableAlias}.client_id AND (c.user_id = ? OR c.email = ?))
+      OR EXISTS (SELECT 1 FROM clients c WHERE c.id = ${tableAlias}.client_id AND (c.user_id = ? OR c.email = ? OR c.id = ?))
     )`;
 
     return {
       clause,
-      params: [actorUser.id, actorUser.id, actorUser.id, actorUser.id, actorUser.email]
+      params: [actorUser.id, actorUser.id, actorUser.id, actorUser.id, actorUser.email, actorUser.client_id || 0]
     };
   }
 

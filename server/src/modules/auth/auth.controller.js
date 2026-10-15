@@ -91,6 +91,8 @@ export class AuthController {
         name: req.user.name,
         email: req.user.email,
         role: req.user.role,
+        clientId: req.user.client_id || null,
+        client_id: req.user.client_id || null,
         department: req.user.department,
         phone: req.user.phone,
         designations,

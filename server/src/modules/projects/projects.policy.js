@@ -48,8 +48,8 @@ export class ProjectsPolicy {
       `SELECT p.id
        FROM projects p
        JOIN clients c ON p.client_id = c.id
-       WHERE p.id = ? AND (c.user_id = ? OR c.email = ?)`,
-      [projectId, user.id, user.email]
+       WHERE p.id = ? AND (c.user_id = ? OR c.email = ? OR c.id = ?)`,
+      [projectId, user.id, user.email, user.client_id || 0]
     );
     if (clientCheck.length > 0) return true;
 

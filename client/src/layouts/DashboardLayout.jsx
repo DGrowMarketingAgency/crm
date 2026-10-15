@@ -101,20 +101,28 @@ export function DashboardLayout() {
 
   const menuItems = [
     {
-      label: 'Core Operations',
+      label: isClientUser ? 'Client Portal' : 'Core Operations',
       children: [
-        { value: '/dashboard', label: 'Leadership Dashboard', icon: DashboardSquare01Icon },
-        (hasPermission('tasks.view') || hasPermission('tasks.view_all')) && {
+        {
+          value: '/dashboard',
+          label: isClientUser
+            ? 'Client Portal'
+            : isAdminUser
+            ? 'Leadership Dashboard'
+            : 'My Workspace',
+          icon: DashboardSquare01Icon
+        },
+        !isClientUser && (hasPermission('tasks.view') || hasPermission('tasks.view_all')) && {
           value: '/tasks',
           label: 'Task Board',
           icon: KanbanIcon
         },
         hasPermission('projects.view') && {
           value: '/projects',
-          label: 'Projects & Milestones',
+          label: isClientUser ? 'Projects & Deliverables' : 'Projects & Milestones',
           icon: Task01Icon
         },
-        hasPermission('workflows.view') && {
+        !isClientUser && hasPermission('workflows.view') && {
           value: '/workflows',
           label: 'Workflow Presets',
           icon: WorkflowSquare01Icon
@@ -122,19 +130,19 @@ export function DashboardLayout() {
       ].filter(Boolean)
     },
     {
-      label: 'Clients & Pipeline',
+      label: isClientUser ? 'Business & Billing' : 'Clients & Pipeline',
       children: [
-        hasPermission('clients.view') && {
+        !isClientUser && hasPermission('clients.view') && {
           value: '/clients',
           label: 'Clients',
           icon: Building01Icon
         },
         hasPermission('calendar.view') && {
           value: '/calendar',
-          label: 'Content & Work Calendar',
+          label: isClientUser ? 'Campaign Calendar' : 'Content & Work Calendar',
           icon: Calendar
         },
-        hasPermission('leads.view') && {
+        !isClientUser && hasPermission('leads.view') && {
           value: '/leads',
           label: 'BD Pipelines',
           icon: FilterIcon
@@ -146,17 +154,18 @@ export function DashboardLayout() {
         },
         hasPermission('invoices.view') && {
           value: '/billing',
-          label: 'Quotations & Invoices',
+          label: isClientUser ? 'Invoices & Quotations' : 'Quotations & Invoices',
           icon: CreditCard
         },
-        hasPermission('reports.view_dashboard') && {
+        !isClientUser && hasPermission('reports.view_dashboard') && {
           value: '/reports',
           label: 'Invoices & Reports',
           icon: Invoice01Icon
         }
       ].filter(Boolean)
     },
-    {
+    // Agency & People (Hidden completely from Clients)
+    !isClientUser && {
       label: 'Agency & People',
       children: [
         hasPermission('departments.view') && {
@@ -217,7 +226,7 @@ export function DashboardLayout() {
     isClientUser && {
       label: 'Account & Security',
       children: [
-        { value: '/shared-credentials', label: 'Shared Credentials', icon: Key }
+        { value: '/shared-credentials', label: 'Shared Credentials Vault', icon: Key }
       ].filter(Boolean)
     }
   ]
