@@ -14,11 +14,15 @@ export const CSRF_COOKIE_NAME = 'xsrf_token';
  * @param {boolean} [remember=false]
  */
 export function setAuthCookies(res, accessToken, refreshToken, remember = false) {
+  const cookieDomain = isProduction ? '.dgrowmarketing.in' : undefined;
+
   // Access Token Cookie (15 minutes)
   res.cookie(ACCESS_COOKIE_NAME, accessToken, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? 'strict' : 'lax',
+    sameSite: isProduction ? 'none' : 'lax',
+    domain: cookieDomain,
+    path: '/',
     maxAge: 15 * 60 * 1000 // 15 minutes
   });
 
@@ -27,8 +31,9 @@ export function setAuthCookies(res, accessToken, refreshToken, remember = false)
   res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? 'strict' : 'lax',
-    path: '/api/auth',
+    sameSite: isProduction ? 'none' : 'lax',
+    domain: cookieDomain,
+    path: '/',
     maxAge: refreshMaxAge
   });
 }
@@ -38,16 +43,15 @@ export function setAuthCookies(res, accessToken, refreshToken, remember = false)
  * @param {import('express').Response} res 
  */
 export function clearAuthCookies(res) {
-  res.clearCookie(ACCESS_COOKIE_NAME, {
+  const cookieDomain = isProduction ? '.dgrowmarketing.in' : undefined;
+  const opts = {
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? 'strict' : 'lax'
-  });
+    sameSite: isProduction ? 'none' : 'lax',
+    domain: cookieDomain,
+    path: '/'
+  };
 
-  res.clearCookie(REFRESH_COOKIE_NAME, {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? 'strict' : 'lax',
-    path: '/api/auth'
-  });
+  res.clearCookie(ACCESS_COOKIE_NAME, opts);
+  res.clearCookie(REFRESH_COOKIE_NAME, opts);
 }

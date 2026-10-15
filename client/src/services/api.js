@@ -1,13 +1,20 @@
 import axios from 'axios';
 
+// Determine API base URL dynamically: use proxy on localhost, direct backend URL in production
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 
+  (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? '/api'
+    : 'https://server.dgrowmarketing.in/api');
+
 // Create configured Axios instance
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
   }
 });
+
 
 let cachedCsrfToken = '';
 
@@ -373,7 +380,7 @@ export const deliverablesService = {
   clientRequestRevision: (id, data) => api.post(`/deliverables/${id}/client-request-revision`, data),
   getClientDeliverables: (clientId, params) => api.get(`/clients/${clientId}/deliverables`, { params }),
   getReviewQueue: () => api.get('/am/approvals-queue'),
-  getDownloadUrl: (id) => `/api/deliverables/${id}/download`
+  getDownloadUrl: (id) => `${API_BASE_URL}/deliverables/${id}/download`
 };
 
 export const ticketsService = {
@@ -402,7 +409,7 @@ export const billingService = {
 
   recordPayment: (id, data) => api.post(`/invoices/${id}/payments`, data),
   getPaymentReceipt: (id) => api.get(`/payments/${id}/receipt`),
-  getDocumentUrl: (type, id) => `/api/billing/documents/${type}/${id}`
+  getDocumentUrl: (type, id) => `${API_BASE_URL}/billing/documents/${type}/${id}`
 };
 
 export const chatService = {
@@ -426,7 +433,7 @@ export const chatService = {
   getMessageInfo: (messageId) => api.get(`/chat/messages/${messageId}/info`),
   editMessage: (messageId, data) => api.patch(`/chat/messages/${messageId}`, data),
   deleteMessage: (messageId) => api.delete(`/chat/messages/${messageId}`),
-  getAttachmentUrl: (messageId) => `/api/chat/attachments/${messageId}/download`
+  getAttachmentUrl: (messageId) => `${API_BASE_URL}/chat/attachments/${messageId}/download`
 };
 
 export const hrService = {

@@ -6,13 +6,18 @@ export function getSocket() {
   return socket;
 }
 
+export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ||
+  (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:5000'
+    : 'https://server.dgrowmarketing.in');
+
 export function connectSocket() {
   if (socket && socket.connected) {
     return socket;
   }
 
   // Connect to backend server with credentials
-  socket = io(window.location.origin.includes('localhost') ? 'http://localhost:5000' : window.location.origin, {
+  socket = io(SOCKET_URL, {
     withCredentials: true,
     transports: ['websocket', 'polling'],
     autoConnect: true,

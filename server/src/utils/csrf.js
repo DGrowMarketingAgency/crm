@@ -14,10 +14,12 @@ export function ensureCsrfToken(req, res) {
   let token = req.cookies[CSRF_COOKIE_NAME];
   if (!token) {
     token = crypto.randomBytes(32).toString('hex');
+    const cookieDomain = isProduction ? '.dgrowmarketing.in' : undefined;
     res.cookie(CSRF_COOKIE_NAME, token, {
       httpOnly: false, // Must be readable by frontend JS/Axios
       secure: isProduction,
-      sameSite: isProduction ? 'strict' : 'lax',
+      sameSite: isProduction ? 'none' : 'lax',
+      domain: cookieDomain,
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000
     });

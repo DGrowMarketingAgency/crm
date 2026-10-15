@@ -37,11 +37,22 @@ app.use(helmet({
 }));
 
 // CORS Configuration with strict origin check and credentials
-const allowedOrigins = [env.CLIENT_URL, 'http://localhost:5173', 'http://localhost:5174'];
+const allowedOrigins = [
+  env.CLIENT_URL,
+  'https://dgrowmarketing.in',
+  'https://www.dgrowmarketing.in',
+  'http://localhost:5173',
+  'http://localhost:5174'
+];
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || /^http:\/\/localhost:517[3-9]$/.test(origin)) {
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      /^http:\/\/localhost:517[3-9]$/.test(origin) ||
+      /^https:\/\/(.*\.)?dgrowmarketing\.in$/.test(origin)
+    ) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
