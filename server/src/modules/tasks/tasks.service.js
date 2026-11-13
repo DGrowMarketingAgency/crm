@@ -31,6 +31,9 @@ export class TasksService {
       projectId = "",
       clientId = "",
       serviceInstanceId = "",
+      serviceId = "",
+      departmentId = "",
+      workflowStage = "",
       source = "",
       columnStatus = "",
       status = "",
@@ -101,6 +104,21 @@ export class TasksService {
       params.push(Number(serviceInstanceId));
     }
 
+    if (departmentId) {
+      whereClauses.push("t.department_id = ?");
+      params.push(Number(departmentId));
+    }
+
+    if (serviceId) {
+      whereClauses.push("(si.service_id = ? OR si.service_type = ?)");
+      params.push(serviceId, serviceId);
+    }
+
+    if (workflowStage && workflowStage.trim()) {
+      whereClauses.push("si.current_stage = ?");
+      params.push(workflowStage.trim());
+    }
+
     if (source.trim()) {
       whereClauses.push("t.source = ?");
       params.push(source.trim());
@@ -152,6 +170,7 @@ export class TasksService {
        FROM tasks t
        LEFT JOIN projects p ON t.project_id = p.id
        LEFT JOIN clients c ON t.client_id = c.id
+       LEFT JOIN service_instances si ON t.service_instance_id = si.id
        ${whereSql}`,
       params,
     );
@@ -172,13 +191,15 @@ export class TasksService {
     // Fetch tasks
     const [tasks] = await pool.query(
       `SELECT t.id, t.task_code, t.title, t.description, t.project_id, t.client_id,
-              t.service_instance_id, t.source, t.column_status, t.is_client_deliverable,
+              t.department_id, t.service_instance_id, t.source, t.column_status, t.is_client_deliverable,
               t.revision_count, t.deliverable_url, t.deliverable_notes, t.assignee_id,
               t.milestone_id, t.parent_task_id, t.creator_id, t.status, t.priority,
               t.start_date, t.due_date, t.completed_at, t.is_archived, t.estimated_minutes,
               t.labels, t.reference_url, t.created_at, t.updated_at,
               p.name as project_name, p.project_code,
               c.name as client_name,
+              d.name as department_name, d.code as department_code,
+              si.label as service_instance_label, si.service_type, si.current_stage as workflow_stage,
               pm.title as milestone_title,
               u.name as creator_name,
               COUNT(DISTINCT st.id) as total_subtasks,
@@ -186,6 +207,8 @@ export class TasksService {
        FROM tasks t
        LEFT JOIN projects p ON t.project_id = p.id
        LEFT JOIN clients c ON t.client_id = c.id
+       LEFT JOIN departments d ON t.department_id = d.id
+       LEFT JOIN service_instances si ON t.service_instance_id = si.id
        LEFT JOIN project_milestones pm ON t.milestone_id = pm.id
        LEFT JOIN users u ON t.creator_id = u.id
        LEFT JOIN tasks st ON st.parent_task_id = t.id

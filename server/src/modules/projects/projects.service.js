@@ -36,6 +36,7 @@ export class ProjectsService {
       clientId = '',
       managerId = '',
       teamId = '',
+      projectType = '',
       isArchived = false,
       sortBy = 'created_at',
       sortOrder = 'desc',
@@ -55,6 +56,11 @@ export class ProjectsService {
     if (search.trim()) {
       whereClauses.push('(p.name LIKE ? OR p.project_code LIKE ? OR p.description LIKE ?)');
       params.push(`%${search.trim()}%`, `%${search.trim()}%`, `%${search.trim()}%`);
+    }
+
+    if (projectType && projectType.trim()) {
+      whereClauses.push('p.project_type = ?');
+      params.push(projectType.trim());
     }
 
     if (status.trim()) {
@@ -103,11 +109,14 @@ export class ProjectsService {
 
     // Fetch projects
     const [projects] = await pool.query(
-      `SELECT p.id, p.name, p.project_code, p.description, p.status, p.priority,
+      `SELECT p.id, p.name, p.project_code, p.description, p.project_type, p.status, p.priority,
               p.visibility, p.start_date, p.due_date, p.completed_at, p.is_archived,
+              p.workflow_preset_id, p.workflow_preset_version_id, p.service_instance_id,
               p.created_at, p.updated_at,
               c.id as client_id, c.name as client_name, c.company_name as client_company,
               u.id as manager_id, u.name as manager_name, u.email as manager_email,
+              si.label as service_instance_label, si.service_type, si.current_stage as service_current_stage, si.cycle as service_cycle,
+              wp.name as workflow_preset_name,
               COUNT(DISTINCT pt.team_id) as team_count,
               COUNT(DISTINCT pm.user_id) as member_count,
               COUNT(DISTINCT pms.id) as total_milestones,
@@ -115,6 +124,8 @@ export class ProjectsService {
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
        LEFT JOIN users u ON p.project_manager_id = u.id
+       LEFT JOIN service_instances si ON p.service_instance_id = si.id
+       LEFT JOIN workflow_presets wp ON p.workflow_preset_id = wp.id
        LEFT JOIN project_teams pt ON p.id = pt.project_id
        LEFT JOIN project_members pm ON p.id = pm.project_id
        LEFT JOIN project_milestones pms ON p.id = pms.project_id
@@ -173,16 +184,18 @@ export class ProjectsService {
     const [rows] = await pool.query(
       `SELECT p.id, p.name, p.project_code, p.project_manager_id, p.client_id,
               p.workflow_preset_id, p.workflow_preset_version_id, p.service_instance_id,
-              p.description, p.status, p.priority,
+              p.project_type, p.description, p.status, p.priority,
               p.visibility, p.start_date, p.due_date, p.completed_at, p.is_archived,
               p.archived_at, p.objectives, p.notes, p.created_at, p.updated_at,
               c.id as client_id, c.name as client_name, c.company_name as client_company, c.email as client_email,
               u.id as manager_id, u.name as manager_name, u.email as manager_email,
+              si.label as service_instance_label, si.service_type, si.current_stage as service_current_stage, si.cycle as service_cycle, si.status as service_status,
               wp.name as workflow_preset_name, wp.preset_code as workflow_preset_code,
               wpv.version_number as workflow_preset_version_number
        FROM projects p
        LEFT JOIN clients c ON p.client_id = c.id
        LEFT JOIN users u ON p.project_manager_id = u.id
+       LEFT JOIN service_instances si ON p.service_instance_id = si.id
        LEFT JOIN workflow_presets wp ON p.workflow_preset_id = wp.id
        LEFT JOIN workflow_preset_versions wpv ON p.workflow_preset_version_id = wpv.id
        WHERE p.id = ?`,
@@ -344,15 +357,16 @@ export class ProjectsService {
       // Insert project
       const [projResult] = await connection.query(
         `INSERT INTO projects (
-          name, project_code, description, client_id, project_manager_id,
+          name, project_code, description, project_type, client_id, project_manager_id,
           workflow_preset_id, workflow_preset_version_id, service_instance_id,
           created_by, status, priority, visibility, start_date, due_date,
           objectives, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           trimmedName,
           trimmedCode,
           data.description || null,
+          data.projectType || 'Regular',
           data.clientId || null,
           data.projectManagerId,
           data.workflowPresetId || null,
@@ -468,13 +482,14 @@ export class ProjectsService {
     try {
       await connection.beginTransaction();
 
+      const newProjectType = data.projectType !== undefined ? data.projectType : project.project_type;
       const newPresetId = data.workflowPresetId !== undefined ? data.workflowPresetId : project.workflow_preset_id;
       const newPresetVerId = data.workflowPresetVersionId !== undefined ? data.workflowPresetVersionId : project.workflow_preset_version_id;
       const newServiceInstId = data.serviceInstanceId !== undefined ? data.serviceInstanceId : project.service_instance_id;
 
       await connection.query(
         `UPDATE projects
-         SET name = ?, description = ?, client_id = ?, project_manager_id = ?,
+         SET name = ?, description = ?, project_type = ?, client_id = ?, project_manager_id = ?,
              workflow_preset_id = ?, workflow_preset_version_id = ?, service_instance_id = ?,
              priority = ?, visibility = ?, start_date = ?, due_date = ?,
              objectives = ?, notes = ?
@@ -482,6 +497,7 @@ export class ProjectsService {
         [
           newName,
           newDesc,
+          newProjectType,
           newClientId || null,
           newManagerId,
           newPresetId || null,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { tasksService, projectsService, usersService } from '../../services/api';
+import { tasksService, projectsService, usersService, clientsService, departmentsService, servicesService } from '../../services/api';
 import { usePermission } from '../../hooks/usePermission';
 import { TaskModal } from './TaskModal';
 import {
@@ -52,7 +52,7 @@ export function TasksPage() {
   const { hasPermission, isOwner, user: currentUser } = usePermission();
 
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'my' | 'overdue'
-  const [viewMode, setViewMode] = useState('list'); // 'list' | 'kanban'
+  const [viewMode, setViewMode] = useState('kanban'); // 'list' | 'kanban'
 
   // Data lists
   const [tasks, setTasks] = useState([]);
@@ -63,6 +63,10 @@ export function TasksPage() {
   // Filter & Search states
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProject, setSelectedProject] = useState(searchParams.get('projectId') || '');
+  const [selectedClient, setSelectedClient] = useState(searchParams.get('clientId') || '');
+  const [selectedDepartment, setSelectedDepartment] = useState('');
+  const [selectedService, setSelectedService] = useState('');
+  const [selectedSource, setSelectedSource] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [selectedPriority, setSelectedPriority] = useState('');
   const [selectedAssignee, setSelectedAssignee] = useState('');
@@ -72,6 +76,9 @@ export function TasksPage() {
   // Dropdowns data
   const [projectsList, setProjectsList] = useState([]);
   const [usersList, setUsersList] = useState([]);
+  const [clientsList, setClientsList] = useState([]);
+  const [departmentsList, setDepartmentsList] = useState([]);
+  const [servicesList, setServicesList] = useState([]);
 
   // Modals & UI states
   const [taskModalOpen, setTaskModalOpen] = useState(false);
@@ -94,6 +101,10 @@ export function TasksPage() {
     page,
     searchTerm,
     selectedProject,
+    selectedClient,
+    selectedDepartment,
+    selectedService,
+    selectedSource,
     selectedStatus,
     selectedPriority,
     selectedAssignee,
@@ -103,12 +114,18 @@ export function TasksPage() {
 
   const loadFilterOptions = async () => {
     try {
-      const [pRes, uRes] = await Promise.all([
+      const [pRes, uRes, cRes, dRes, sRes] = await Promise.allSettled([
         projectsService.getProjects({ limit: 100 }),
-        usersService.getUsers({ status: 'active', limit: 100 })
+        usersService.getUsers({ status: 'active', limit: 100 }),
+        clientsService.getClients({ limit: 100 }),
+        departmentsService.getDepartments({ limit: 100 }),
+        servicesService.getServices({ limit: 100 })
       ]);
-      setProjectsList(pRes.data.projects || []);
-      setUsersList(uRes.data.users || []);
+      if (pRes.status === 'fulfilled') setProjectsList(pRes.value.data.projects || []);
+      if (uRes.status === 'fulfilled') setUsersList(uRes.value.data.users || []);
+      if (cRes.status === 'fulfilled') setClientsList(cRes.value.data.clients || []);
+      if (dRes.status === 'fulfilled') setDepartmentsList(dRes.value.data.departments || []);
+      if (sRes.status === 'fulfilled') setServicesList(sRes.value.data.services || []);
     } catch (e) {
       console.error('Failed to load filter options:', e);
     }
@@ -124,6 +141,10 @@ export function TasksPage() {
       const params = {
         search: searchTerm,
         projectId: selectedProject || undefined,
+        clientId: selectedClient || undefined,
+        departmentId: selectedDepartment || undefined,
+        serviceId: selectedService || undefined,
+        source: selectedSource || undefined,
         status: selectedStatus || undefined,
         priority: selectedPriority || undefined,
         assigneeId: selectedAssignee || undefined,
@@ -351,9 +372,9 @@ export function TasksPage() {
 
       {/* Filter & Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Search Input */}
-          <div className="relative sm:col-span-2 lg:col-span-1">
+          <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
             <input
               type="text"
@@ -363,8 +384,46 @@ export function TasksPage() {
                 setPage(1);
               }}
               placeholder="Search title, code..."
-              className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition"
+              className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition"
             />
+          </div>
+
+          {/* Client Filter */}
+          <div>
+            <select
+              value={selectedClient}
+              onChange={(e) => {
+                setSelectedClient(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-700 transition"
+            >
+              <option value="">All Clients</option>
+              {clientsList.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.company_name || c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Service Filter */}
+          <div>
+            <select
+              value={selectedService}
+              onChange={(e) => {
+                setSelectedService(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-700 transition"
+            >
+              <option value="">All Services</option>
+              {servicesList.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.service_code})
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Project Filter */}
@@ -375,7 +434,7 @@ export function TasksPage() {
                 setSelectedProject(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-700 transition"
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-700 transition"
             >
               <option value="">All Projects</option>
               {projectsList.map((p) => (
@@ -386,22 +445,38 @@ export function TasksPage() {
             </select>
           </div>
 
-          {/* Status Filter (Hidden when in Kanban view) */}
+          {/* Department Filter */}
           <div>
             <select
-              value={selectedStatus}
+              value={selectedDepartment}
               onChange={(e) => {
-                setSelectedStatus(e.target.value);
+                setSelectedDepartment(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-700 transition"
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-700 transition"
             >
-              <option value="">All Statuses</option>
-              <option value="todo">To Do</option>
-              <option value="in_progress">In Progress</option>
-              <option value="in_review">In Review</option>
-              <option value="blocked">Blocked</option>
-              <option value="completed">Completed</option>
+              <option value="">All Departments</option>
+              {departmentsList.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Task Source Filter */}
+          <div>
+            <select
+              value={selectedSource}
+              onChange={(e) => {
+                setSelectedSource(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-700 transition"
+            >
+              <option value="">All Sources (Manual & Workflow)</option>
+              <option value="Workflow">Workflow Generated Only</option>
+              <option value="Manual">Manual Tasks Only</option>
             </select>
           </div>
 
@@ -413,13 +488,13 @@ export function TasksPage() {
                 setSelectedPriority(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-700 transition"
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-700 transition"
             >
               <option value="">All Priorities</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
               <option value="urgent">Urgent</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
             </select>
           </div>
 
@@ -431,7 +506,7 @@ export function TasksPage() {
                 setSelectedAssignee(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-700 transition"
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-700 transition"
             >
               <option value="">All Assignees</option>
               {usersList.map((u) => (
@@ -630,9 +705,25 @@ export function TasksPage() {
 
                           {/* Project Name */}
                           {t.project_name && (
-                            <p className="text-[11px] font-medium text-slate-500 mb-2 truncate">
+                            <p className="text-[11px] font-medium text-slate-500 mb-1 truncate">
                               📁 {t.project_name}
                             </p>
+                          )}
+
+                          {/* Service Instance & Workflow Stage */}
+                          {t.service_instance_label && (
+                            <p className="text-[11px] font-medium text-slate-500 mb-1 truncate">
+                              ⚡ {t.service_instance_label} {t.workflow_stage ? `[${t.workflow_stage}]` : ''}
+                            </p>
+                          )}
+
+                          {/* Department Badge */}
+                          {t.department_name && (
+                            <div className="mb-2">
+                              <span className="text-[10px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                                🏛️ {t.department_name}
+                              </span>
+                            </div>
                           )}
 
                           {/* Subtasks Progress */}

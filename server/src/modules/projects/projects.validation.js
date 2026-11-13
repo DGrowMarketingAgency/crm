@@ -17,6 +17,7 @@ export const createProjectSchema = z.object({
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Due date must be in YYYY-MM-DD format').optional().nullable(),
   objectives: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  projectType: z.enum(['Indulge', 'One Time', 'Team', 'Regular']).default('Regular'),
   workflowPresetId: z.number().int().positive().optional().nullable(),
   workflowPresetVersionId: z.number().int().positive().optional().nullable(),
   serviceInstanceId: z.number().int().positive().optional().nullable(),
@@ -27,6 +28,7 @@ export const createProjectSchema = z.object({
 export const updateProjectSchema = z.object({
   name: z.string().min(2).max(255).optional(),
   description: z.string().optional().nullable(),
+  projectType: z.enum(['Indulge', 'One Time', 'Team', 'Regular']).optional(),
   clientId: z.number().int().positive().optional().nullable(),
   projectManagerId: z.number().int().positive().optional(),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),

@@ -127,18 +127,30 @@ export class AutoTriggerEngine {
           actorUser.id
         );
 
-        // 1. Insert ServiceInstance
+        // 1. Resolve master service record & metadata
+        const [svcRows] = await connection.query(
+          'SELECT id, department_id, workflow_preset_id, execution_cycle FROM services WHERE service_code = ?',
+          [serviceType]
+        );
+        const serviceId = svcRows.length > 0 ? svcRows[0].id : null;
+        const deptId = svcRows.length > 0 ? svcRows[0].department_id : null;
+        const wpId = svcRows.length > 0 ? svcRows[0].workflow_preset_id : null;
+
+        // Insert ServiceInstance
         const [siRes] = await connection.query(
           `INSERT INTO service_instances (
-            client_id, service_type, label, current_stage, owner_user_id,
-            cycle, status, stage_index, created_by
-          ) VALUES (?, ?, ?, ?, ?, ?, 'active', 0, ?)`,
+            client_id, service_id, service_type, label, project_type, current_stage, owner_user_id,
+            department_id, workflow_preset_id, cycle, status, stage_index, created_by
+          ) VALUES (?, ?, ?, ?, 'Regular', ?, ?, ?, ?, ?, 'active', 0, ?)`,
           [
             clientId,
+            serviceId,
             serviceType,
             template.label,
             firstStage.name,
             defaultAssigneeId,
+            deptId,
+            wpId,
             template.cycle,
             actorUser.id
           ]

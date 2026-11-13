@@ -14,6 +14,10 @@ import {
   CheckSquare
 } from 'lucide-react';
 
+// Local YYYY-MM-DD. toISOString() converts to UTC, which shifts dates back a day east of UTC (e.g. IST).
+const toLocalDateStr = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const CATEGORY_STYLES = {
@@ -64,7 +68,7 @@ export function MonthlyCalendarGrid({
   const prevMonthDays = [];
   for (let i = startDayOfWeek - 1; i >= 0; i--) {
     prevMonthDays.push({
-      dateStr: new Date(year, month - 1, prevMonthLastDay - i).toISOString().slice(0, 10),
+      dateStr: toLocalDateStr(new Date(year, month - 1, prevMonthLastDay - i)),
       dayNum: prevMonthLastDay - i,
       isCurrentMonth: false
     });
@@ -87,7 +91,7 @@ export function MonthlyCalendarGrid({
   const nextMonthDays = [];
   for (let day = 1; day <= nextMonthDaysCount; day++) {
     nextMonthDays.push({
-      dateStr: new Date(year, month + 1, day).toISOString().slice(0, 10),
+      dateStr: toLocalDateStr(new Date(year, month + 1, day)),
       dayNum: day,
       isCurrentMonth: false
     });
@@ -105,7 +109,7 @@ export function MonthlyCalendarGrid({
     eventsByDate[d].push(evt);
   });
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = toLocalDateStr(new Date());
   const monthName = currentDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
   return (

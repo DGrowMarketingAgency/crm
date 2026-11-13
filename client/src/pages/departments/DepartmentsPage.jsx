@@ -67,8 +67,10 @@ export function DepartmentsPage() {
         offset
       });
 
-      setDepartments(res.data.departments || []);
-      setTotal(res.data.total || 0);
+      const deptList = res.data?.data?.departments || res.data?.departments || [];
+      const totalCount = res.data?.data?.total ?? res.data?.total ?? deptList.length;
+      setDepartments(deptList);
+      setTotal(totalCount);
     } catch (err) {
       console.error(err);
       const errMsg =

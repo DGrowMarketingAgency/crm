@@ -17,6 +17,7 @@ export function ProjectModal({ isOpen, onClose, project = null, onSuccess }) {
   const [dueDate, setDueDate] = useState('');
   const [objectives, setObjectives] = useState('');
   const [notes, setNotes] = useState('');
+  const [projectType, setProjectType] = useState('Regular');
   const [workflowPresetId, setWorkflowPresetId] = useState('');
 
   // Assignments
@@ -40,6 +41,7 @@ export function ProjectModal({ isOpen, onClose, project = null, onSuccess }) {
         setName(project.name || '');
         setProjectCode(project.project_code || '');
         setDescription(project.description || '');
+        setProjectType(project.project_type || 'Regular');
         setClientId(project.client_id ? String(project.client_id) : '');
         setProjectManagerId(project.project_manager_id ? String(project.project_manager_id) : '');
         setStatus(project.status || 'planning');
@@ -56,6 +58,7 @@ export function ProjectModal({ isOpen, onClose, project = null, onSuccess }) {
         setName('');
         setProjectCode('');
         setDescription('');
+        setProjectType('Regular');
         setClientId('');
         setProjectManagerId('');
         setStatus('planning');
@@ -145,6 +148,7 @@ export function ProjectModal({ isOpen, onClose, project = null, onSuccess }) {
         await projectsService.updateProject(project.id, {
           name: name.trim(),
           description: description.trim() || null,
+          projectType,
           clientId: clientId ? Number(clientId) : null,
           projectManagerId: Number(projectManagerId),
           priority,
@@ -174,6 +178,7 @@ export function ProjectModal({ isOpen, onClose, project = null, onSuccess }) {
           name: name.trim(),
           projectCode: projectCode.trim().toUpperCase(),
           description: description.trim() || null,
+          projectType,
           clientId: clientId ? Number(clientId) : null,
           projectManagerId: Number(projectManagerId),
           status,
@@ -356,8 +361,24 @@ export function ProjectModal({ isOpen, onClose, project = null, onSuccess }) {
             </select>
           </div>
 
-          {/* Row 3: Priority, Status, Visibility */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Row 3: Project Type, Priority, Status, Visibility */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                Project Type
+              </label>
+              <select
+                value={projectType}
+                onChange={(e) => setProjectType(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 text-sm font-medium"
+              >
+                <option value="Regular">Regular</option>
+                <option value="Indulge">Indulge</option>
+                <option value="One Time">One Time</option>
+                <option value="Team">Team</option>
+              </select>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
                 Priority

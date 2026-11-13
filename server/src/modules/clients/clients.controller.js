@@ -136,6 +136,12 @@ export class ClientsController {
 
   static async getEligibleAccountManagers(req, res, next) {
     try {
+      // Client portal accounts hold clients.view for their own record; they must not list internal staff.
+      const isClientPortal =
+        req.user.role === 'client' || Boolean(req.user.client_id) || (req.user.roles || []).some((r) => r.slug === 'client');
+      if (isClientPortal) {
+        return res.status(403).json({ success: false, error: { message: 'Not available for client accounts', code: 'FORBIDDEN' } });
+      }
       const managers = await ClientsService.getEligibleAccountManagers();
       res.json({ managers });
     } catch (err) {

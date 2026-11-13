@@ -999,15 +999,14 @@ export class ClientsService {
    */
   static async getEligibleAccountManagers() {
     const [rows] = await pool.query(`
-      SELECT DISTINCT u.id, u.name, u.email, u.role, u.designation, u.status
+      SELECT DISTINCT u.id, u.name, u.email, u.role, u.designations AS designation, u.status
       FROM users u
       LEFT JOIN user_roles ur ON u.id = ur.user_id
       LEFT JOIN roles r ON ur.role_id = r.id
       WHERE u.status = 'active'
         AND (
           u.role IN ('account_manager', 'admin', 'owner')
-          OR r.slug IN ('account-manager', 'admin', 'owner')
-          OR u.is_owner = TRUE
+          OR r.slug IN ('account-manager', 'account_manager', 'admin', 'owner')
         )
       ORDER BY u.name ASC
     `);

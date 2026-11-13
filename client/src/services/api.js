@@ -1,10 +1,12 @@
 import axios from 'axios';
 
 // Determine API base URL dynamically: use proxy on localhost, direct backend URL in production
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 
+export const API_BASE_URL = import.meta.env.VITE_API_URL ||
   (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? '/api'
-    : 'https://server.dgrowmarketing.in/api');
+    : 'https://localhost:5173/api');
+
+// : 'https://server.dgrowmarketing.in/api');
 
 // Create configured Axios instance
 const api = axios.create({
@@ -312,6 +314,19 @@ export const reportsService = {
   exportReport: (data) => api.post('/reports/exports', data, { responseType: 'blob' })
 };
 
+export const servicesService = {
+  getServices: (params) => api.get('/services', { params }),
+  getService: (id) => api.get(`/services/${id}`),
+  createService: (data) => api.post('/services', data),
+  updateService: (id, data) => api.put(`/services/${id}`, data),
+  changeStatus: (id, status) => api.patch(`/services/${id}/status`, { status }),
+  archiveService: (id) => api.post(`/services/${id}/archive`),
+  getCategories: () => api.get('/services/categories'),
+  getCatalog: () => api.get('/services/catalog'),
+  bundleServices: (clientId, data) => api.post(`/clients/${clientId}/services`, data),
+  listClientServices: (clientId) => api.get(`/clients/${clientId}/services`)
+};
+
 export const servicesCatalogService = {
   getCatalog: () => api.get('/services/catalog')
 };
@@ -497,6 +512,32 @@ export const credentialsService = {
   getAuditHistory: (id) => api.get(`/credentials/${id}/audit-history`),
   archiveCredential: (id) => api.delete(`/credentials/${id}`),
   getEligibleEmployees: () => api.get('/credentials/meta/employees')
+};
+
+// Client project flow: pipelines → client projects → step assignments → employee task desk
+export const projectFlowService = {
+  getPipelines: (params) => api.get('/project-flow/pipelines', { params }),
+  getPipeline: (id) => api.get(`/project-flow/pipelines/${id}`),
+  createPipeline: (data) => api.post('/project-flow/pipelines', data),
+  updatePipeline: (id, data) => api.put(`/project-flow/pipelines/${id}`, data),
+  setPipelineStatus: (id, status) => api.patch(`/project-flow/pipelines/${id}/status`, { status }),
+  getClients: (params) => api.get('/project-flow/clients', { params }),
+  getClientProjects: (clientId) => api.get(`/project-flow/clients/${clientId}/projects`),
+  createProject: (data) => api.post('/project-flow/projects', data),
+  getProject: (id) => api.get(`/project-flow/projects/${id}`),
+  setProjectStatus: (id, status) => api.patch(`/project-flow/projects/${id}/status`, { status }),
+  updateBilling: (id, data) => api.patch(`/project-flow/projects/${id}/billing`, data),
+  generateCycle: (id, month) => api.post(`/project-flow/projects/${id}/cycles`, month ? { month } : {}),
+  setStepAssignees: (id, stepId, userIds) => api.put(`/project-flow/projects/${id}/steps/${stepId}/assignees`, { userIds }),
+  completeStep: (id, stepId) => api.post(`/project-flow/projects/${id}/steps/${stepId}/complete`),
+  approveStep: (id, stepId, kind) => api.post(`/project-flow/projects/${id}/steps/${stepId}/approve`, { kind }),
+  requestChanges: (id, stepId, note) => api.post(`/project-flow/projects/${id}/steps/${stepId}/request-changes`, { note }),
+  getEmployees: (params) => api.get('/project-flow/employees', { params }),
+  getEmployeeDesk: (userId) => api.get(`/project-flow/employees/${userId}`),
+  getEmployeeProject: (userId, projectId) => api.get(`/project-flow/employees/${userId}/projects/${projectId}`),
+  createEmployeeTasks: (userId, projectId, tasks) =>
+    api.post(`/project-flow/employees/${userId}/projects/${projectId}/tasks`, { tasks }),
+  trackTask: (taskId, action) => api.post(`/project-flow/tasks/${taskId}/tracker`, { action })
 };
 
 export default api;

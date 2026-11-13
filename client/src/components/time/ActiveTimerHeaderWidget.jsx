@@ -14,16 +14,23 @@ export function ActiveTimerHeaderWidget() {
   useEffect(() => {
     fetchActiveTimer();
     const interval = setInterval(fetchActiveTimer, 15000); // Check every 15s for multi-tab sync
-    return () => clearInterval(interval);
+    // Other screens (e.g. the employee task tracker) announce timer changes so the header updates instantly.
+    window.addEventListener('timer:changed', fetchActiveTimer);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('timer:changed', fetchActiveTimer);
+    };
   }, []);
 
   useEffect(() => {
     if (!activeTimer) return;
 
+    // Count up from the server-computed elapsed time; comparing startedAt with the browser clock is wrong
+    // whenever the DB time zone differs from UTC.
+    const baseSeconds = activeTimer.elapsedSeconds || 0;
+    const syncedAt = activeTimer.syncedAt || Date.now();
     const timerInterval = setInterval(() => {
-      const started = new Date(activeTimer.startedAt).getTime();
-      const current = Date.now();
-      setElapsedSeconds(Math.max(0, Math.floor((current - started) / 1000)));
+      setElapsedSeconds(baseSeconds + Math.floor((Date.now() - syncedAt) / 1000));
     }, 1000);
 
     return () => clearInterval(timerInterval);
@@ -32,7 +39,7 @@ export function ActiveTimerHeaderWidget() {
   const fetchActiveTimer = async () => {
     try {
       const res = await timeService.getActiveTimer();
-      setActiveTimer(res.data.timer);
+      setActiveTimer(res.data.timer ? { ...res.data.timer, syncedAt: Date.now() } : null);
       if (res.data.timer) {
         setElapsedSeconds(res.data.timer.elapsedSeconds || 0);
       }

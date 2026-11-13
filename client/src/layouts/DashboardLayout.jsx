@@ -17,7 +17,10 @@ import {
   MessageSquare,
   Briefcase,
   Calendar,
-  Key
+  Key,
+  Building2,
+  GitBranch,
+  ListChecks
 } from 'lucide-react';
 import {
   DashboardSquare01Icon,
@@ -75,9 +78,14 @@ export function DashboardLayout() {
 
   const getActiveValue = () => {
     const path = location.pathname;
-    if (path.startsWith('/tasks')) return '/tasks';
-    if (path.startsWith('/projects')) return '/projects';
+    if (path.startsWith('/client-projects') || path.startsWith('/flow-projects')) return '/client-projects';
+    if (path.startsWith('/project-pipelines')) return '/project-pipelines';
+    if (path.startsWith('/employee-tasks')) return '/employee-tasks';
+    if (path.startsWith('/services')) return '/services';
+    if (path.startsWith('/workflows/activity')) return '/workflows/activity';
     if (path.startsWith('/workflows')) return '/workflows';
+    if (path.startsWith('/tasks')) return '/employee-tasks';
+    if (path.startsWith('/projects')) return '/projects';
     if (path.startsWith('/clients')) return '/clients';
     if (path.startsWith('/calendar')) return '/calendar';
     if (path.startsWith('/leads')) return '/leads';
@@ -101,7 +109,7 @@ export function DashboardLayout() {
 
   const menuItems = [
     {
-      label: isClientUser ? 'Client Portal' : 'Core Operations',
+      label: isClientUser ? 'Client Portal' : 'Service & Workflow Management',
       children: [
         {
           value: '/dashboard',
@@ -112,20 +120,32 @@ export function DashboardLayout() {
             : 'My Workspace',
           icon: DashboardSquare01Icon
         },
-        !isClientUser && (hasPermission('tasks.view') || hasPermission('tasks.view_all')) && {
-          value: '/tasks',
-          label: 'Task Board',
-          icon: KanbanIcon
+        !isClientUser && (hasPermission('services.view') || isAdminUser) && {
+          value: '/services',
+          label: 'Service Management',
+          icon: Briefcase
         },
-        hasPermission('projects.view') && {
+        // Staff manage projects through Client Projects; the client portal keeps its project view.
+        isClientUser && hasPermission('projects.view') && {
           value: '/projects',
-          label: isClientUser ? 'Projects & Deliverables' : 'Projects & Milestones',
+          label: 'Projects & Deliverables',
           icon: Task01Icon
         },
-        !isClientUser && hasPermission('workflows.view') && {
-          value: '/workflows',
-          label: 'Workflow Presets',
-          icon: WorkflowSquare01Icon
+        !isClientUser && hasPermission('projects.view') && {
+          value: '/client-projects',
+          label: 'Client Projects',
+          icon: Building2
+        },
+        !isClientUser &&
+          (hasPermission('workflows.create') || hasPermission('workflows.update') || hasPermission('projects.create')) && {
+          value: '/project-pipelines',
+          label: 'Project Pipeline',
+          icon: GitBranch
+        },
+        !isClientUser && hasPermission('tasks.view') && {
+          value: '/employee-tasks',
+          label: 'Employee Task Desk',
+          icon: ListChecks
         }
       ].filter(Boolean)
     },

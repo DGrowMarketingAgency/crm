@@ -138,12 +138,15 @@ export class TimeService {
         throw err;
       }
 
-      // 3. Compute elapsed duration using server timestamps
-      const now = new Date();
-      const startedAt = new Date(timer.started_at);
-      const diffMs = Math.max(0, now.getTime() - startedAt.getTime());
-      const durationMinutes = Math.max(1, Math.round(diffMs / 60000));
-      const workDate = now.toISOString().slice(0, 10);
+      // 3. Compute elapsed duration on the DB clock only. started_at was stamped with MySQL NOW(); comparing it
+      //    with Node's clock breaks whenever the DB session time zone differs from UTC (e.g. IST servers).
+      const [[clock]] = await conn.query(
+        'SELECT NOW() AS now_db, CURDATE() AS today_db, GREATEST(TIMESTAMPDIFF(SECOND, ?, NOW()), 0) AS elapsed_seconds',
+        [timer.started_at]
+      );
+      const now = clock.now_db;
+      const durationMinutes = Math.max(1, Math.round(Number(clock.elapsed_seconds) / 60));
+      const workDate = clock.today_db instanceof Date ? clock.today_db.toISOString().slice(0, 10) : String(clock.today_db).slice(0, 10);
       const finalDescription = description !== undefined ? description : timer.description;
 
       // 4. Insert time entry
@@ -210,6 +213,7 @@ export class TimeService {
   static async getActiveTimer(userId) {
     const [rows] = await pool.query(
       `SELECT at.id, at.user_id, at.task_id, at.started_at, at.status, at.description,
+              GREATEST(TIMESTAMPDIFF(SECOND, at.started_at, NOW()), 0) AS elapsed_seconds,
               t.title as task_title, t.task_code, p.id as project_id, p.name as project_name
        FROM active_timers at
        JOIN tasks t ON at.task_id = t.id
@@ -221,8 +225,8 @@ export class TimeService {
     if (rows.length === 0) return null;
 
     const row = rows[0];
-    const startedAt = new Date(row.started_at);
-    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt.getTime()) / 1000));
+    // Same clock as started_at (MySQL NOW()), so the result is correct regardless of server time zones.
+    const elapsedSeconds = Number(row.elapsed_seconds);
 
     return {
       id: row.id,

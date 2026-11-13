@@ -6,6 +6,8 @@ import { seedRbac } from './modules/rbac/rbac.seed.js';
 import { socketService } from './modules/notifications/socket.service.js';
 import { emailService } from './modules/notifications/email.service.js';
 import { RemindersService } from './modules/notifications/reminders.service.js';
+import { runMigration021 } from './scripts/run-migration-021.js';
+import { ProjectFlowService } from './modules/project-flow/projectFlow.service.js';
 
 async function startServer() {
   console.log('🔄 Checking database connectivity...');
@@ -23,6 +25,13 @@ async function startServer() {
   await seedRbac();
   console.log('🛡️  RBAC system roles and permissions synchronized.');
 
+  // Idempotent schema for project pipelines / client project flow
+  try {
+    await runMigration021();
+  } catch (err) {
+    console.error('⚠️ Project flow migration (021) failed:', err.message);
+  }
+
   // Create HTTP server and initialize Socket.IO
   const server = http.createServer(app);
   socketService.init(server);
@@ -38,6 +47,14 @@ async function startServer() {
     RemindersService.checkAndSendReminders().catch((err) => console.error('Reminders worker error:', err));
   }, 60000);
 
+  // Regular (retainer) projects: create this month's cycle on boot and re-check every 6 hours
+  const runCycles = () =>
+    ProjectFlowService.runMonthlyCycles()
+      .then((r) => r.created && console.log(`🔁 Created ${r.created} monthly project cycle(s) for ${r.month}`))
+      .catch((err) => console.error('Monthly cycle worker error:', err));
+  runCycles();
+  const cyclesInterval = setInterval(runCycles, 6 * 60 * 60 * 1000);
+
   server.listen(env.PORT, () => {
     console.log(`🚀 Agency Manager Server running on http://localhost:${env.PORT}`);
     console.log(`🛡️  Allowed Client Origin: ${env.CLIENT_URL}`);
@@ -49,6 +66,7 @@ async function startServer() {
     console.log('\n🛑 Gracefully shutting down server...');
     clearInterval(emailInterval);
     clearInterval(remindersInterval);
+    clearInterval(cyclesInterval);
     server.close(() => {
       console.log('🏁 HTTP server closed.');
       process.exit(0);

@@ -43,6 +43,7 @@ export function ProjectsPage() {
   const [selectedStatus, setSelectedStatus] = useState('');
   const [selectedPriority, setSelectedPriority] = useState('');
   const [selectedClient, setSelectedClient] = useState('');
+  const [selectedProjectType, setSelectedProjectType] = useState('');
   const [sortBy, setSortBy] = useState('created_at');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'table'
 
@@ -67,7 +68,7 @@ export function ProjectsPage() {
 
   useEffect(() => {
     fetchProjects();
-  }, [page, searchTerm, selectedStatus, selectedPriority, selectedClient, sortBy]);
+  }, [page, searchTerm, selectedStatus, selectedPriority, selectedClient, selectedProjectType, sortBy]);
 
   const loadClients = async () => {
     try {
@@ -97,6 +98,7 @@ export function ProjectsPage() {
         status: selectedStatus,
         priority: selectedPriority,
         clientId: selectedClient,
+        projectType: selectedProjectType || undefined,
         sortBy,
         limit,
         offset
@@ -185,10 +187,10 @@ export function ProjectsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <FolderKanban className="h-7 w-7 text-emerald-600" />
-            Project Management
+            Projects / Service Instances
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Coordinate client accounts, project teams, deliverable timelines, and milestone completion.
+            Client service engagements, execution cycles, project types & workflow milestone progress.
           </p>
         </div>
 
@@ -198,7 +200,7 @@ export function ProjectsPage() {
             className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition shadow-sm self-start sm:self-auto"
           >
             <Plus className="h-4 w-4" />
-            Create Project
+            Create Project / Instance
           </button>
         )}
       </div>
@@ -265,6 +267,22 @@ export function ProjectsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Project Type Filter */}
+          <select
+            value={selectedProjectType}
+            onChange={(e) => {
+              setSelectedProjectType(e.target.value);
+              setPage(1);
+            }}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+          >
+            <option value="">All Project Types</option>
+            <option value="Regular">Regular</option>
+            <option value="Indulge">Indulge</option>
+            <option value="One Time">One Time</option>
+            <option value="Team">Team</option>
+          </select>
+
           {/* Status Filter */}
           <select
             value={selectedStatus}
@@ -386,11 +404,24 @@ export function ProjectsPage() {
               className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-emerald-300 transition cursor-pointer p-5 flex flex-col justify-between group"
             >
               <div>
-                {/* Header: Code & Health */}
+                {/* Header: Code, Type & Health */}
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
-                    {proj.project_code}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+                      {proj.project_code}
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      proj.project_type === 'Indulge'
+                        ? 'bg-purple-50 text-purple-700 border-purple-200'
+                        : proj.project_type === 'One Time'
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : proj.project_type === 'Team'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : 'bg-slate-50 text-slate-700 border-slate-200'
+                    }`}>
+                      {proj.project_type || 'Regular'}
+                    </span>
+                  </div>
                   <div className="flex items-center gap-1.5">
                     {getHealthBadge(proj.health)}
                     {getPriorityBadge(proj.priority)}
@@ -411,6 +442,16 @@ export function ProjectsPage() {
                     <span className="italic text-gray-400">Internal Agency</span>
                   )}
                 </p>
+
+                {/* Linked Service Instance */}
+                {proj.service_instance_label && (
+                  <div className="mt-2 px-2.5 py-1.5 rounded-lg bg-red-50/60 border border-red-100 text-[11px] text-red-900 flex items-center justify-between">
+                    <span className="font-semibold truncate">Service: {proj.service_instance_label}</span>
+                    <span className="font-mono text-[10px] bg-white px-1.5 py-0.5 rounded border border-red-200 font-bold shrink-0">
+                      {proj.service_current_stage || 'Active'}
+                    </span>
+                  </div>
+                )}
 
                 <p className="text-xs text-gray-600 line-clamp-2 mt-2 min-h-[32px]">
                   {proj.description || <span className="italic text-gray-400">No project description provided.</span>}

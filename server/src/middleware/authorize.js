@@ -57,10 +57,12 @@ export async function resolveUserPermissions(userId) {
 }
 
 /**
- * Middleware requiring a specific granular permission
- * @param {string} permissionKey
+ * Middleware requiring a specific granular permission.
+ * An array means "any of these" (several routes pass arrays; before this they denied every non-owner).
+ * @param {string | string[]} permissionKey
  */
 export function requirePermission(permissionKey) {
+  const requiredKeys = Array.isArray(permissionKey) ? permissionKey : [permissionKey];
   return async (req, res, next) => {
     try {
       if (!req.user || !req.user.id) {
@@ -94,14 +96,14 @@ export function requirePermission(permissionKey) {
       req.user.permissions = permissions;
       req.user.isOwner = isOwner;
 
-      if (isOwner || permissions.includes(permissionKey)) {
+      if (isOwner || requiredKeys.some((key) => permissions.includes(key))) {
         return next();
       }
 
       return res.status(403).json({
         success: false,
         error: {
-          message: `Access denied. You do not have the required permission: '${permissionKey}'.`,
+          message: `Access denied. You do not have the required permission: '${requiredKeys.join("' or '")}'.`,
           code: 'FORBIDDEN',
           requiredPermission: permissionKey
         }

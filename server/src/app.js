@@ -27,6 +27,7 @@ import chatRoutes from './modules/chat/chat.routes.js';
 import hrRoutes from './modules/hr/hr.routes.js';
 import calendarRoutes from './modules/calendar/calendar.routes.js';
 import credentialsRoutes from './modules/credentials/credentials.routes.js';
+import projectFlowRoutes from './modules/project-flow/projectFlow.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -156,6 +157,9 @@ app.use('/api/calendar', calendarRoutes);
 
 // D-Grow OS: Secure Client Password Manager & Credential Access Control
 app.use('/api', credentialsRoutes);
+
+// Client project flow: pipelines, project categories, step assignments, employee task desk
+app.use('/api', projectFlowRoutes);
 
 // 404 Handler
 app.use((req, res) => {

@@ -25,14 +25,23 @@ import { ClientWorkspacePage } from '../pages/clients/ClientWorkspacePage';
 import { LeadsPage } from '../pages/leads/LeadsPage';
 import { DepartmentsPage } from '../pages/departments/DepartmentsPage';
 import { DepartmentDetailsPage } from '../pages/departments/DepartmentDetailsPage';
+import { ServicesPage } from '../pages/services/ServicesPage';
 import { WorkflowPresetsPage } from '../pages/workflows/WorkflowPresetsPage';
 import { WorkflowBuilderPage } from '../pages/workflows/WorkflowBuilderPage';
+import { WorkflowActivityPage } from '../pages/workflows/WorkflowActivityPage';
 import { TicketsPage } from '../pages/tickets/TicketsPage';
 import { BillingPage } from '../pages/billing/BillingPage';
 import { ChatPage } from '../pages/chat/ChatPage';
 import { HRHubPage } from '../pages/hr/HRHubPage';
 import { CalendarPage } from '../pages/calendar/CalendarPage';
 import { PasswordManagerPage } from '../pages/credentials/PasswordManagerPage';
+import { ClientProjectsPage } from '../pages/project-flow/ClientProjectsPage';
+import { ClientProjectManagementPage } from '../pages/project-flow/ClientProjectManagementPage';
+import { FlowProjectPage } from '../pages/project-flow/FlowProjectPage';
+import { PipelinesPage } from '../pages/project-flow/PipelinesPage';
+import { EmployeesPage } from '../pages/project-flow/EmployeesPage';
+import { EmployeeDeskPage } from '../pages/project-flow/EmployeeDeskPage';
+import { EmployeeProjectTasksPage } from '../pages/project-flow/EmployeeProjectTasksPage';
 
 export function AppRoutes() {
   return (
@@ -112,6 +121,19 @@ export function AppRoutes() {
           <Route element={<PermissionRoute requiredPermission="projects.view" />}>
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/projects/:id" element={<ProjectDetailsPage />} />
+            {/* Client project flow: clients → client projects → pipeline steps */}
+            <Route path="/client-projects" element={<ClientProjectsPage />} />
+            <Route path="/client-projects/:clientId" element={<ClientProjectManagementPage />} />
+            <Route path="/project-pipelines" element={<PipelinesPage />} />
+          </Route>
+
+          {/* Employee task desk: employees → their projects → split tasks */}
+          <Route element={<PermissionRoute requiredPermission="tasks.view" />}>
+            <Route path="/employee-tasks" element={<EmployeesPage />} />
+            <Route path="/employee-tasks/:userId" element={<EmployeeDeskPage />} />
+            <Route path="/employee-tasks/:userId/projects/:projectId" element={<EmployeeProjectTasksPage />} />
+            {/* Executives assigned to a step need the project page without projects.view; the API checks access per project. */}
+            <Route path="/flow-projects/:id" element={<FlowProjectPage />} />
           </Route>
 
           {/* Phase 3: Users Management */}
@@ -131,9 +153,15 @@ export function AppRoutes() {
             <Route path="/departments/:id" element={<DepartmentDetailsPage />} />
           </Route>
 
+          {/* D-Grow OS Service Management Module */}
+          <Route element={<PermissionRoute requiredPermission="services.view" />}>
+            <Route path="/services" element={<ServicesPage />} />
+          </Route>
+
           {/* D-Grow OS Phase 1: Workflow Presets & Builder */}
           <Route element={<PermissionRoute requiredPermission="workflows.view" />}>
             <Route path="/workflows" element={<WorkflowPresetsPage />} />
+            <Route path="/workflows/activity" element={<WorkflowActivityPage />} />
             <Route path="/workflows/builder" element={<WorkflowBuilderPage />} />
             <Route path="/workflows/:id" element={<WorkflowBuilderPage />} />
           </Route>
