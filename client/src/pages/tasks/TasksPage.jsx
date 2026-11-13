@@ -116,7 +116,7 @@ export function TasksPage() {
     try {
       const [pRes, uRes, cRes, dRes, sRes] = await Promise.allSettled([
         projectsService.getProjects({ limit: 100 }),
-        usersService.getUsers({ status: 'active', limit: 100 }),
+        usersService.getUsers({ status: 'active', limit: 500, staffOnly: true }),
         clientsService.getClients({ limit: 100 }),
         departmentsService.getDepartments({ limit: 100 }),
         servicesService.getServices({ limit: 100 })

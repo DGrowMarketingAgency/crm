@@ -79,7 +79,7 @@ export function ProjectModal({ isOpen, onClose, project = null, onSuccess }) {
   const loadDropdownOptions = async () => {
     try {
       const [uRes, tRes, cRes, pRes] = await Promise.all([
-        usersService.getUsers({ status: 'active', limit: 100 }),
+        usersService.getUsers({ status: 'active', limit: 500, staffOnly: true }),
         teamsService.getTeams({ status: 'active', limit: 100 }),
         clientsService.getClients({ status: 'active', limit: 100 }),
         workflowPresetsService.getPresets({ status: 'published', limit: 100 })

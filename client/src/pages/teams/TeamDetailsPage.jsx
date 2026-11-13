@@ -86,7 +86,7 @@ export function TeamDetailsPage() {
     setSelectedTeamRole('member');
     setIsAddMemberOpen(true);
     try {
-      const res = await usersService.getUsers({ status: 'active', limit: 100 });
+      const res = await usersService.getUsers({ status: 'active', limit: 500, staffOnly: true });
       const currentMemberIds = new Set((team?.members || []).map((m) => m.user_id));
       // Only active users not already in team
       const notInTeam = (res.data.users || []).filter((u) => !currentMemberIds.has(u.id));

@@ -80,7 +80,7 @@ export function LeadsPage() {
 
   const fetchAccountManagers = async () => {
     try {
-      const res = await usersService.getUsers({ limit: 100, status: 'active' });
+      const res = await usersService.getUsers({ status: 'active', limit: 500, staffOnly: true });
       const ams = (res.data.users || []).filter((u) => {
         const slugs = u.roles?.map((r) => r.slug) || [];
         return slugs.includes('account-manager') || u.role === 'account_manager' || slugs.includes('owner');

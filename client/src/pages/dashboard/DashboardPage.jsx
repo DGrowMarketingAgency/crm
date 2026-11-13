@@ -1163,8 +1163,10 @@ function ExecutiveLeadershipDashboard({ user, isOwner, hasPermission }) {
   // Live metrics states
   const [dashboardData, setDashboardData] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
+  const [teamTotal, setTeamTotal] = useState(0);
   const [clientCount, setClientCount] = useState(0);
   const [leadsCount, setLeadsCount] = useState(0);
+  const { isLoading: permissionsLoading, permissions } = usePermission();
 
   const fetchLiveMetrics = async (isManual = false) => {
     if (isManual) setIsRefreshing(true);
@@ -1174,10 +1176,10 @@ function ExecutiveLeadershipDashboard({ user, isOwner, hasPermission }) {
     try {
       const [dashRes, usersRes, clientsRes, leadsRes] = await Promise.allSettled([
         hasPermission('reports.view_dashboard')
-          ? reportsService.getDashboard({ period: '30d' })
+          ? reportsService.getDashboard({ period: 'last_30_days' })
           : Promise.resolve({ data: null }),
         hasPermission('users.view')
-          ? usersService.getUsers({ limit: 50 })
+          ? usersService.getUsers({ limit: 50, status: 'active', staffOnly: true })
           : Promise.resolve({ data: { users: [] } }),
         hasPermission('clients.view')
           ? clientsService.getClients({ limit: 1 })
@@ -1188,11 +1190,14 @@ function ExecutiveLeadershipDashboard({ user, isOwner, hasPermission }) {
       ]);
 
       if (dashRes.status === 'fulfilled' && dashRes.value?.data) {
-        setDashboardData(dashRes.value.data);
+        // API shape is { success, data: { kpis, ... } }.
+        setDashboardData(dashRes.value.data.data || dashRes.value.data);
       }
 
       if (usersRes.status === 'fulfilled' && usersRes.value?.data) {
         setTeamMembers(usersRes.value.data.users || []);
+        // The list is capped at 50 rows for the matrix; the card shows the real active staff total.
+        setTeamTotal(usersRes.value.data.total ?? (usersRes.value.data.users || []).length);
       }
 
       if (clientsRes.status === 'fulfilled' && clientsRes.value?.data) {
@@ -1211,9 +1216,11 @@ function ExecutiveLeadershipDashboard({ user, isOwner, hasPermission }) {
     }
   };
 
+  // Wait for permissions: fetching straight after login (before they load) made every card show 0.
   useEffect(() => {
+    if (permissionsLoading) return;
     fetchLiveMetrics();
-  }, []);
+  }, [permissionsLoading, permissions?.length]);
 
   const kpis = dashboardData?.kpis || {
     totalProjects: 0,
@@ -1294,7 +1301,7 @@ function ExecutiveLeadershipDashboard({ user, isOwner, hasPermission }) {
           </div>
           <div className="mt-3">
             <span className="text-2xl font-black text-slate-900 block leading-tight">
-              {teamMembers.length}
+              {teamTotal}
             </span>
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mt-0.5">
               Agency Team
@@ -1543,13 +1550,13 @@ function ExecutiveLeadershipDashboard({ user, isOwner, hasPermission }) {
         {teamMembers.length > 5 && (
           <div className="px-5 py-3 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between text-xs">
             <span className="text-slate-500 font-medium">
-              Showing top 5 of {teamMembers.length} team members
+              Showing top 5 of {teamTotal} team members
             </span>
             <Link
               to="/users"
               className="font-semibold text-[#e3272e] hover:text-red-700 inline-flex items-center gap-1 transition-colors"
             >
-              <span>View All {teamMembers.length} in Directory</span>
+              <span>View All {teamTotal} in Directory</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </Link>
           </div>

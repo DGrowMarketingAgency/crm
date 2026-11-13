@@ -886,7 +886,11 @@ export class CalendarService {
 
     // Employees list for assignment
     const [empRows] = await pool.query(
-      'SELECT id, name, email, role, department FROM users WHERE status = "active" ORDER BY name ASC'
+      // Staff only: client-portal accounts must not appear as assignable staff.
+      `SELECT u.id, u.name, u.email, u.role, u.department FROM users u
+       WHERE u.status = 'active' AND u.role <> 'client' AND u.client_id IS NULL
+         AND NOT EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id AND r.slug = 'client')
+       ORDER BY u.name ASC`
     );
 
     return {

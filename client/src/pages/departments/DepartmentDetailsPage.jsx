@@ -91,7 +91,7 @@ export function DepartmentDetailsPage() {
     setAddMemberModalOpen(true);
 
     try {
-      const res = await usersService.getUsers({ status: 'active', limit: 100 });
+      const res = await usersService.getUsers({ status: 'active', limit: 500, staffOnly: true });
       setAllUsers(res.data.users || []);
     } catch (e) {
       console.error(e);

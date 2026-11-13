@@ -10,7 +10,8 @@ export class UsersController {
         limit: Number(req.query.limit) || 20,
         offset: Number(req.query.offset) || 0,
         sort: req.query.sort || 'created_at',
-        order: req.query.order || 'DESC'
+        order: req.query.order || 'DESC',
+        staffOnly: req.query.staffOnly === 'true'
       });
       res.status(200).json({ success: true, ...result });
     } catch (err) {

@@ -32,7 +32,7 @@ export function TeamModal({ isOpen, onClose, team = null, onSuccess }) {
 
   const loadActiveUsers = async () => {
     try {
-      const res = await usersService.getUsers({ status: 'active', limit: 100 });
+      const res = await usersService.getUsers({ status: 'active', limit: 500, staffOnly: true });
       setActiveUsers(res.data.users || []);
     } catch (e) {
       console.error(e);

@@ -36,6 +36,11 @@ function parseJson(value, fallback) {
   }
 }
 
+/** SQL: users row `alias` is internal staff (not a client-portal account by role column, linked client, or client role). */
+const staffSql = (alias = 'users') =>
+  `(${alias}.role <> 'client' AND ${alias}.client_id IS NULL
+    AND NOT EXISTS (SELECT 1 FROM user_roles sur JOIN roles sr ON sr.id = sur.role_id WHERE sur.user_id = ${alias}.id AND sr.slug = 'client'))`;
+
 const roleSlugs = (user) => (user.roles || []).map((r) => r.slug);
 
 export function isClientPortalUser(user) {
@@ -94,7 +99,7 @@ async function assertActiveUsers(conn, userIds) {
   const ids = [...new Set(userIds.filter(Boolean).map(Number))];
   if (ids.length === 0) return;
   const [rows] = await conn.query(
-    "SELECT id FROM users WHERE id IN (?) AND status = 'active' AND role <> 'client'",
+    `SELECT id FROM users WHERE id IN (?) AND status = 'active' AND ${staffSql('users')}`,
     [ids]
   );
   if (rows.length !== ids.length) {
@@ -881,7 +886,7 @@ export class ProjectFlowService {
   static async listEmployees(actor, { search = '' } = {}) {
     assertStaff(actor);
     const params = [];
-    let where = "u.status = 'active' AND u.role <> 'client'";
+    let where = `u.status = 'active' AND ${staffSql('u')}`;
     if (!canSeeAllEmployees(actor)) {
       // Team leaders see themselves plus the people on projects they lead.
       where += ` AND (u.id = ? OR ${this.#ledByViewerSql()})`;
@@ -932,7 +937,7 @@ export class ProjectFlowService {
   static async getEmployeeDesk(userId, actor) {
     const leaderScope = await this.#employeeViewScope(actor, userId);
     const [users] = await pool.query(
-      "SELECT id, name, email, role, department, designations FROM users WHERE id = ? AND role <> 'client'",
+      `SELECT id, name, email, role, department, designations FROM users WHERE id = ? AND ${staffSql('users')}`,
       [userId]
     );
     if (users.length === 0) throw httpError(404, 'Employee not found', 'NOT_FOUND');
@@ -978,7 +983,7 @@ export class ProjectFlowService {
     const loaded = await this.#loadProjectForAction(projectId);
     const canManage = this.#canManage(loaded, actor);
     if (leaderScope && !canManage) throw httpError(403, 'You can only open projects you lead for this employee', 'FORBIDDEN');
-    const [users] = await pool.query("SELECT id, name, email, department, designations FROM users WHERE id = ? AND role <> 'client'", [userId]);
+    const [users] = await pool.query(`SELECT id, name, email, department, designations FROM users WHERE id = ? AND ${staffSql('users')}`, [userId]);
     if (users.length === 0) throw httpError(404, 'Employee not found', 'NOT_FOUND');
     const project = await this.getProject(projectId);
     const u = Number(userId);

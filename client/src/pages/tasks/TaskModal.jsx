@@ -133,7 +133,7 @@ export function TaskModal({
       const [pRes, cRes, uRes] = await Promise.all([
         projectsService.getProjects({ limit: 100, status: 'active' }).catch(() => ({ data: { projects: [] } })),
         clientsService.getClients({ limit: 100, status: 'active' }).catch(() => ({ data: { clients: [] } })),
-        usersService.getUsers({ limit: 100, status: 'active' }).catch(() => ({ data: { users: [] } }))
+        usersService.getUsers({ status: 'active', limit: 500, staffOnly: true }).catch(() => ({ data: { users: [] } }))
       ]);
       setProjectsList(pRes.data.projects || []);
       setClientsList(cRes.data.clients || []);
