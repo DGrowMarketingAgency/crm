@@ -18,16 +18,28 @@ import {
   Briefcase,
   Calendar,
   Key,
+  ReceiptIndianRupee,
+  BellRing,
+  BarChart3,
+  Target,
+  FileSpreadsheet,
+  CalendarDays,
+  Medal,
+  FileText,
+  BadgeIndianRupee,
+  Settings2,
   Building2,
   GitBranch,
-  ListChecks
+  ListChecks,
+  Wallet,
+  Landmark,
+  Megaphone
 } from 'lucide-react';
 import {
   DashboardSquare01Icon,
   Building01Icon,
   KanbanIcon,
   Task01Icon,
-  FilterIcon,
   Invoice01Icon,
   UserGroupIcon,
   UserMultiple02Icon,
@@ -79,6 +91,20 @@ export function DashboardLayout() {
   const getActiveValue = () => {
     const path = location.pathname;
     if (path.startsWith('/client-projects') || path.startsWith('/flow-projects')) return '/client-projects';
+    if (path.startsWith('/sales/desk')) return '/sales/desk';
+    if (path.startsWith('/sales/leads')) return '/sales/leads';
+    if (path.startsWith('/sales/meetings')) return '/sales/meetings';
+    if (path.startsWith('/sales/proposals')) return '/sales/proposals';
+    if (path.startsWith('/sales/quotes')) return '/sales/quotes';
+    if (path.startsWith('/sales/marketers')) return '/sales/marketers';
+    if (path.startsWith('/finance/invoices')) return '/finance/invoices';
+    if (path.startsWith('/finance/clients')) return '/finance/clients';
+    if (path.startsWith('/finance/alerts')) return '/finance/alerts';
+    if (path.startsWith('/finance/reports')) return '/finance/reports';
+    if (path.startsWith('/finance/settings')) return '/finance/settings';
+    if (path.startsWith('/finance/expenses')) return '/finance/expenses';
+    if (path.startsWith('/finance/loans')) return '/finance/loans';
+    if (path.startsWith('/finance/ad-funds')) return '/finance/ad-funds';
     if (path.startsWith('/project-pipelines')) return '/project-pipelines';
     if (path.startsWith('/employee-tasks')) return '/employee-tasks';
     if (path.startsWith('/services')) return '/services';
@@ -150,7 +176,7 @@ export function DashboardLayout() {
       ].filter(Boolean)
     },
     {
-      label: isClientUser ? 'Business & Billing' : 'Clients & Pipeline',
+      label: isClientUser ? 'Business & Billing' : 'Clients & Support',
       children: [
         !isClientUser && hasPermission('clients.view') && {
           value: '/clients',
@@ -162,26 +188,55 @@ export function DashboardLayout() {
           label: isClientUser ? 'Campaign Calendar' : 'Content & Work Calendar',
           icon: Calendar
         },
-        !isClientUser && hasPermission('leads.view') && {
-          value: '/leads',
-          label: 'BD Pipelines',
-          icon: FilterIcon
-        },
+        // Old "BD Pipelines" (/leads) and staff "Quotations & Invoices" (/billing) are replaced by
+        // Sales (enquiries, proposals, quotations) and Finance (GST invoices). Clients keep their invoices page.
         hasPermission('tickets.view') && {
           value: '/tickets',
           label: 'Support Tickets',
           icon: LifeBuoy
         },
-        hasPermission('invoices.view') && {
+        isClientUser && hasPermission('invoices.view') && {
           value: '/billing',
-          label: isClientUser ? 'Invoices & Quotations' : 'Quotations & Invoices',
+          label: 'Invoices & Quotations',
           icon: CreditCard
         },
         !isClientUser && hasPermission('reports.view_dashboard') && {
           value: '/reports',
-          label: 'Invoices & Reports',
+          label: 'Work Reports',
           icon: Invoice01Icon
         }
+      ].filter(Boolean)
+    },
+    // Sales: lead follow-ups, meetings, proposals, marketers (staff only)
+    !isClientUser && (hasPermission('leads.view') || hasPermission('proposals.view')) && {
+      label: 'Sales',
+      children: [
+        hasPermission('leads.view') && { value: '/sales/desk', label: 'My Sales Desk', icon: Briefcase },
+        hasPermission('leads.view') && { value: '/sales/leads', label: 'Leads & Follow-ups', icon: Target },
+        hasPermission('leads.view') && { value: '/sales/meetings', label: 'Meetings', icon: CalendarDays },
+        hasPermission('proposals.view') && { value: '/sales/proposals', label: 'Proposals', icon: FileText },
+        hasPermission('sales_quotes.view') && { value: '/sales/quotes', label: 'Quotations', icon: FileSpreadsheet },
+        hasPermission('leads.view') && { value: '/sales/marketers', label: 'Marketers', icon: Medal }
+      ].filter(Boolean)
+    },
+    // Finance: GST invoicing (staff only)
+    !isClientUser && hasPermission('invoices.view') && {
+      label: 'Finance',
+      children: [
+        { value: '/finance/invoices', label: 'GST Invoices', icon: ReceiptIndianRupee },
+        { value: '/finance/alerts', label: 'Billing Alerts', icon: BellRing },
+        hasPermission('finance.reports.view') && { value: '/finance/reports', label: 'Reports & GST', icon: BarChart3 },
+        { value: '/finance/clients', label: 'Client GST Profiles', icon: BadgeIndianRupee },
+        { value: '/finance/settings', label: 'Finance Settings', icon: Settings2 }
+      ].filter(Boolean)
+    },
+    // Miscellaneous: office expenses & purchases, EMI & loans, client ad funds (staff only)
+    !isClientUser && (hasPermission('expenses.view') || hasPermission('adfunds.view')) && {
+      label: 'Miscellaneous',
+      children: [
+        hasPermission('expenses.view') && { value: '/finance/expenses', label: 'Expenses & Purchases', icon: Wallet },
+        hasPermission('expenses.view') && { value: '/finance/loans', label: 'EMI & Loans', icon: Landmark },
+        hasPermission('adfunds.view') && { value: '/finance/ad-funds', label: 'Client Ad Funds', icon: Megaphone }
       ].filter(Boolean)
     },
     // Agency & People (Hidden completely from Clients)

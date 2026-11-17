@@ -100,9 +100,9 @@ export class TicketsService {
 
       // Audit Log
       await AuditService.log({
-        userId: actorUser.id,
+        actorId: actorUser.id,
         action: 'TICKET_CREATED',
-        entity: 'support_tickets',
+        entityType: 'support_tickets',
         entityId: ticketId,
         details: { ticketNumber, clientId, subject: data.subject, priority, assignedTo }
       });
@@ -110,12 +110,13 @@ export class TicketsService {
       // Notification
       if (assignedTo && assignedTo !== actorUser.id) {
         await NotificationsService.createNotification({
-          userId: assignedTo,
+          recipientUserId: assignedTo,
           title: 'New Support Ticket Assigned',
           message: `Ticket ${ticketNumber}: "${data.subject}" has been assigned to you.`,
           type: 'ticket',
           entityType: 'ticket',
-          entityId: ticketId
+          entityId: ticketId,
+          actionUrl: '/tickets'
         });
       }
 
@@ -321,21 +322,23 @@ export class TicketsService {
     if (type !== 'internal_note') {
       if (isClient && ticket.assigned_to) {
         await NotificationsService.createNotification({
-          userId: ticket.assigned_to,
+          recipientUserId: ticket.assigned_to,
           title: `Reply on Ticket ${ticket.ticket_number}`,
           message: `${actorUser.name || 'Client'} replied on ticket "${ticket.subject}"`,
           type: 'ticket',
           entityType: 'ticket',
-          entityId: ticketId
+          entityId: ticketId,
+          actionUrl: '/tickets'
         });
       } else if (!isClient && ticket.created_by !== actorUser.id) {
         await NotificationsService.createNotification({
-          userId: ticket.created_by,
+          recipientUserId: ticket.created_by,
           title: `Agency Reply on Ticket ${ticket.ticket_number}`,
           message: `New update received on ticket "${ticket.subject}"`,
           type: 'ticket',
           entityType: 'ticket',
-          entityId: ticketId
+          entityId: ticketId,
+          actionUrl: '/tickets'
         });
       }
     }
@@ -422,9 +425,9 @@ export class TicketsService {
     }
 
     await AuditService.log({
-      userId: actorUser.id,
+      actorId: actorUser.id,
       action: 'TICKET_UPDATED',
-      entity: 'support_tickets',
+      entityType: 'support_tickets',
       entityId: ticketId,
       details: updates
     });

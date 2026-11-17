@@ -22,7 +22,8 @@ import { TimeTrackingPage } from '../pages/time/TimeTrackingPage';
 import { ReportsPage } from '../pages/reports/ReportsPage';
 import { ClientsPage } from '../pages/clients/ClientsPage';
 import { ClientWorkspacePage } from '../pages/clients/ClientWorkspacePage';
-import { LeadsPage } from '../pages/leads/LeadsPage';
+import { usePermission } from '../hooks/usePermission';
+import { useAuth } from '../hooks/useAuth';
 import { DepartmentsPage } from '../pages/departments/DepartmentsPage';
 import { DepartmentDetailsPage } from '../pages/departments/DepartmentDetailsPage';
 import { ServicesPage } from '../pages/services/ServicesPage';
@@ -42,6 +43,35 @@ import { PipelinesPage } from '../pages/project-flow/PipelinesPage';
 import { EmployeesPage } from '../pages/project-flow/EmployeesPage';
 import { EmployeeDeskPage } from '../pages/project-flow/EmployeeDeskPage';
 import { EmployeeProjectTasksPage } from '../pages/project-flow/EmployeeProjectTasksPage';
+import { InvoicesRegisterPage } from '../pages/finance/InvoicesRegisterPage';
+import { InvoiceBuilderPage } from '../pages/finance/InvoiceBuilderPage';
+import { InvoiceViewPage } from '../pages/finance/InvoiceViewPage';
+import { ClientGstPage } from '../pages/finance/ClientGstPage';
+import { FinanceSettingsPage } from '../pages/finance/FinanceSettingsPage';
+import { FinanceReportsPage } from '../pages/finance/FinanceReportsPage';
+import { BillingAlertsPage } from '../pages/finance/BillingAlertsPage';
+import { ExpensesPage } from '../pages/finance/ExpensesPage';
+import { LoansPage } from '../pages/finance/LoansPage';
+import { AdFundsPage } from '../pages/finance/AdFundsPage';
+import { LeadsBoardPage } from '../pages/sales/LeadsBoardPage';
+import { SalesDeskPage } from '../pages/sales/SalesDeskPage';
+import { LeadDetailPage } from '../pages/sales/LeadDetailPage';
+import { MeetingsPage } from '../pages/sales/MeetingsPage';
+import { MarketersPage } from '../pages/sales/MarketersPage';
+import { ProposalsPage } from '../pages/sales/ProposalsPage';
+import { ProposalEditorPage } from '../pages/sales/ProposalEditorPage';
+import { PublicProposalPage } from '../pages/sales/PublicProposalPage';
+import { PublicQuotePage } from '../pages/sales/PublicQuotePage';
+import { QuotationsPage } from '../pages/sales/QuotationsPage';
+import { QuoteEditorPage } from '../pages/sales/QuoteEditorPage';
+
+/** Clients keep the invoices page; staff use Finance → GST Invoices (and Sales → Quotations). */
+function BillingRoute() {
+  const { user } = useAuth();
+  const { roles } = usePermission();
+  const isClient = Boolean(user?.client_id) || (roles || []).some((r) => r.slug === 'client');
+  return isClient ? <BillingPage /> : <Navigate to="/finance/invoices" replace />;
+}
 
 export function AppRoutes() {
   return (
@@ -53,6 +83,10 @@ export function AppRoutes() {
 
       {/* Public Token-based Acceptance */}
       <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
+
+      {/* Public proposal link shared with clients (no login) */}
+      <Route path="/p/:token" element={<PublicProposalPage />} />
+      <Route path="/q/:token" element={<PublicQuotePage />} />
 
       {/* Protected Routes */}
       <Route element={<ProtectedRoute />}>
@@ -102,9 +136,9 @@ export function AppRoutes() {
             <Route path="/calendar" element={<CalendarPage />} />
           </Route>
 
-          {/* D-Grow OS Phase 1: 3 BD Pipelines (Leads) */}
+          {/* The old 3-pipeline board is replaced by Sales → Leads & Follow-ups; old links land there. */}
           <Route element={<PermissionRoute requiredPermission="leads.view" />}>
-            <Route path="/leads" element={<LeadsPage />} />
+            <Route path="/leads" element={<Navigate to="/sales/leads" replace />} />
           </Route>
 
           {/* D-Grow OS Phase 6: Client Support Tickets Desk */}
@@ -114,7 +148,7 @@ export function AppRoutes() {
 
           {/* D-Grow OS Phase 6: Quotations, Invoices & Payment Tracking */}
           <Route element={<PermissionRoute requiredPermission="invoices.view" />}>
-            <Route path="/billing" element={<BillingPage />} />
+            <Route path="/billing" element={<BillingRoute />} />
           </Route>
 
           {/* Phase 4: Projects & Milestones Management */}
@@ -134,6 +168,47 @@ export function AppRoutes() {
             <Route path="/employee-tasks/:userId/projects/:projectId" element={<EmployeeProjectTasksPage />} />
             {/* Executives assigned to a step need the project page without projects.view; the API checks access per project. */}
             <Route path="/flow-projects/:id" element={<FlowProjectPage />} />
+          </Route>
+
+          {/* Sales pipeline: leads & follow-ups, meetings, marketers, proposals */}
+          <Route element={<PermissionRoute requiredPermission="leads.view" />}>
+            <Route path="/sales/desk" element={<SalesDeskPage />} />
+            <Route path="/sales/leads" element={<LeadsBoardPage />} />
+            <Route path="/sales/leads/:id" element={<LeadDetailPage />} />
+            <Route path="/sales/meetings" element={<MeetingsPage />} />
+            <Route path="/sales/marketers" element={<MarketersPage />} />
+          </Route>
+          <Route element={<PermissionRoute requiredPermission="proposals.view" />}>
+            <Route path="/sales/proposals" element={<ProposalsPage />} />
+            <Route path="/sales/proposals/new" element={<ProposalEditorPage />} />
+            <Route path="/sales/proposals/:id" element={<ProposalEditorPage />} />
+          </Route>
+          <Route element={<PermissionRoute requiredPermission="sales_quotes.view" />}>
+            <Route path="/sales/quotes" element={<QuotationsPage />} />
+            <Route path="/sales/quotes/new" element={<QuoteEditorPage />} />
+            <Route path="/sales/quotes/:id" element={<QuoteEditorPage />} />
+          </Route>
+
+          {/* Finance: GST invoices, client GST profiles, agency billing settings */}
+          <Route element={<PermissionRoute requiredPermission="invoices.view" />}>
+            <Route path="/finance/invoices" element={<InvoicesRegisterPage />} />
+            <Route path="/finance/invoices/new" element={<InvoiceBuilderPage />} />
+            <Route path="/finance/invoices/:id" element={<InvoiceViewPage />} />
+            <Route path="/finance/invoices/:id/edit" element={<InvoiceBuilderPage />} />
+            <Route path="/finance/clients" element={<ClientGstPage />} />
+            <Route path="/finance/settings" element={<FinanceSettingsPage />} />
+            <Route path="/finance/alerts" element={<BillingAlertsPage />} />
+          </Route>
+          <Route element={<PermissionRoute requiredPermission="finance.reports.view" />}>
+            <Route path="/finance/reports" element={<FinanceReportsPage />} />
+          </Route>
+          {/* Miscellaneous: office expenses & purchases, EMI & loans, client ad funds */}
+          <Route element={<PermissionRoute requiredPermission="expenses.view" />}>
+            <Route path="/finance/expenses" element={<ExpensesPage />} />
+            <Route path="/finance/loans" element={<LoansPage />} />
+          </Route>
+          <Route element={<PermissionRoute requiredPermission="adfunds.view" />}>
+            <Route path="/finance/ad-funds" element={<AdFundsPage />} />
           </Route>
 
           {/* Phase 3: Users Management */}

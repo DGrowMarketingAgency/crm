@@ -55,6 +55,15 @@ export class UsersController {
     }
   }
 
+  static async deleteUser(req, res, next) {
+    try {
+      const result = await UsersService.deleteUser(req.params.id, req.user, req);
+      res.status(200).json({ success: true, ...result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async getUserTeams(req, res, next) {
     try {
       const teams = await UsersService.getUserTeams(req.params.id);

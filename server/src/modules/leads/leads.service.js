@@ -1,5 +1,6 @@
 import { pool } from '../../config/db.js';
 import { AuditService } from '../audit/audit.service.js';
+import { ClientsService } from '../clients/clients.service.js';
 
 export const BD_PIPELINE_STAGES = {
   'D-Grow': ['New', 'Contacted', 'DiscoveryCallDone', 'ProposalSent', 'Negotiation', 'Won', 'Lost'],
@@ -20,8 +21,8 @@ export class LeadsService {
     const isGlobal = actorUser.is_owner || userSlugs.includes('owner') || userSlugs.includes('admin');
     if (!isGlobal) {
       if (userSlugs.includes('field-executive') || userSlugs.includes('account-manager')) {
-        whereClauses.push('(l.owner_user_id = ? OR l.created_by = ?)');
-        params.push(actorUser.id, actorUser.id);
+        whereClauses.push('(l.owner_user_id = ? OR l.created_by = ? OR l.rep_user_id = ?)');
+        params.push(actorUser.id, actorUser.id, actorUser.id);
       }
     }
 
@@ -77,10 +78,11 @@ export class LeadsService {
   static async getLeadById(leadId, actorUser) {
     const [rows] = await pool.query(
       `SELECT l.*,
-              u.name as owner_name, u.email as owner_email,
+              u.name as owner_name, u.email as owner_email, rp.name as rep_name,
               c.name as converted_client_name
        FROM leads l
        LEFT JOIN users u ON l.owner_user_id = u.id
+       LEFT JOIN users rp ON l.rep_user_id = rp.id
        LEFT JOIN clients c ON l.converted_client_id = c.id
        WHERE l.id = ?`,
       [leadId]
@@ -91,6 +93,19 @@ export class LeadsService {
       err.status = 404;
       err.code = 'LEAD_NOT_FOUND';
       throw err;
+    }
+
+    // Same isolation as listLeads: field executives / account managers only open their own leads.
+    const userSlugs = actorUser?.roles?.map((r) => r.slug) || [];
+    const isGlobal = actorUser?.isOwner || actorUser?.is_owner || userSlugs.includes('owner') || userSlugs.includes('admin');
+    if (actorUser && !isGlobal && (userSlugs.includes('field-executive') || userSlugs.includes('account-manager'))) {
+      const lead = rows[0];
+      if (![lead.owner_user_id, lead.created_by, lead.rep_user_id].map(Number).includes(Number(actorUser.id))) {
+        const err = new Error('This lead is assigned to someone else');
+        err.status = 403;
+        err.code = 'FORBIDDEN';
+        throw err;
+      }
     }
 
     return rows[0];
@@ -186,34 +201,55 @@ export class LeadsService {
       throw err;
     }
 
+    const clientName = lead.company_name || lead.contact_name || lead.title;
+    const clientEmail = (lead.email || `client-${leadId}@dgrow.internal`).trim().toLowerCase();
+    const clientEntity = lead.pipeline_entity === 'MedGrowDigi' ? 'MedGrowDigi' : 'D-Grow';
+    const vertical = lead.pipeline_entity === 'MedGrowDigi' ? 'Healthcare' : 'General';
+
+    // Client emails are unique: say which client already uses it instead of failing on the key.
+    const [[dupe]] = await pool.query('SELECT id, name FROM clients WHERE email = ?', [clientEmail]);
+    if (dupe) {
+      const err = new Error(`A client with the email ${clientEmail} already exists (${dupe.name}). Change the enquiry's email, or work with that client.`);
+      err.status = 409;
+      err.code = 'CLIENT_EMAIL_EXISTS';
+      throw err;
+    }
+
+    // The marketer handling the enquiry becomes the account manager unless one is chosen.
+    const managerId = accountManagerId || lead.owner_user_id || actorUser.id;
+    const requirements = [
+      lead.services_interested && `Services: ${lead.services_interested}`,
+      lead.estimated_value && `Budget: ₹${Number(lead.estimated_value).toLocaleString('en-IN')}`,
+      `Source: ${lead.source || 'Other'}${lead.referrer_name ? ` (${lead.referrer_name})` : ''}`,
+      lead.notes && `Notes: ${lead.notes}`,
+      `Onboarded from enquiry #${leadId}`
+    ].filter(Boolean).join('\n');
+
+    // Same client code format as "New Client" (CLT-2026-021).
+    const clientCode = await ClientsService.generateClientCode();
+
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
 
-      // 1. Create client record
-      const clientName = lead.company_name || lead.contact_name || lead.title;
-      const clientEmail = lead.email || `client-${leadId}@dgrow.internal`;
-      const clientEntity = lead.pipeline_entity === 'MedGrowDigi' ? 'MedGrowDigi' : 'D-Grow';
-      const vertical = lead.pipeline_entity === 'MedGrowDigi' ? 'Healthcare' : 'General';
-
+      // 1. Create client record (active, so it shows in the client lists straight away)
       const [cRes] = await connection.query(
         `INSERT INTO clients (
-          name, email, entity, vertical, lifecycle_stage, account_manager_id,
-          company_name, phone, status, created_by
-        ) VALUES (?, ?, ?, ?, 'L1', ?, ?, ?, 'active', ?)`,
-        [
-          clientName,
-          clientEmail,
-          clientEntity,
-          vertical,
-          accountManagerId || actorUser.id,
-          lead.company_name,
-          lead.phone,
-          actorUser.id
-        ]
+          name, client_code, email, entity, vertical, lifecycle_stage, account_manager_id, onboarding_owner_id,
+          company_name, phone, status, requirements_notes, created_by
+        ) VALUES (?, ?, ?, ?, ?, 'L1', ?, ?, ?, ?, 'active', ?, ?)`,
+        [clientName, clientCode, clientEmail, clientEntity, vertical, managerId, managerId, lead.company_name, lead.phone, requirements, actorUser.id]
       );
 
       const clientId = cRes.insertId;
+
+      // Contact person from the enquiry becomes the primary contact.
+      if (lead.contact_name) {
+        await connection.query(
+          'INSERT INTO client_contacts (client_id, name, email, phone, is_primary) VALUES (?, ?, ?, ?, 1)',
+          [clientId, lead.contact_name, clientEmail, lead.phone || null]
+        );
+      }
 
       // 2. Mark lead as Won and link client
       await connection.query(
@@ -222,6 +258,20 @@ export class LeadsService {
       );
 
       await connection.commit();
+
+      // Standard 8-step onboarding checklist, owned by the account manager. The steps the
+      // enquiry already covers are ticked: requirements captured and account manager assigned.
+      try {
+        await ClientsService.initializeOnboardingChecklist(clientId, managerId);
+        const done = ['am_assigned', ...(lead.services_interested ? ['req_collected'] : [])];
+        await pool.query(
+          `UPDATE client_onboarding_items SET is_completed = 1, completed_at = NOW(), completed_by = ?, notes = 'From the enquiry'
+           WHERE client_id = ? AND item_key IN (?)`,
+          [actorUser.id, clientId, done]
+        );
+      } catch (checklistErr) {
+        console.error('[leads] onboarding checklist setup failed:', checklistErr.message);
+      }
 
       await AuditService.log({
         actorUserId: actorUser.id,

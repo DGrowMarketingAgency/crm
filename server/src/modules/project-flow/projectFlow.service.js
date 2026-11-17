@@ -3,6 +3,7 @@ import { pool } from '../../config/db.js';
 import { AuditService } from '../audit/audit.service.js';
 import { TimeService } from '../time/time.service.js';
 import { TasksService } from '../tasks/tasks.service.js';
+import { FinanceService } from '../finance/finance.service.js';
 
 export const PROJECT_CATEGORIES = ['regular', 'one_time', 'urgent', 'out_of_service'];
 
@@ -264,7 +265,9 @@ export class ProjectFlowService {
     const [projects] = await pool.query(
       `SELECT p.id, p.name, p.project_code, p.description, p.project_category, p.assignment_mode,
               p.pipeline_id, p.service_id, p.team_leader_id, p.parent_project_id, p.cycle_month,
-              p.monthly_deliverables, p.billing_amount, p.billing_status,
+              p.monthly_deliverables, p.billing_amount, p.billing_status, p.retainer_auto_invoice, p.retainer_invoice_type,
+              (SELECT x.id FROM invoices x WHERE x.project_id = p.id AND x.status <> 'void' ORDER BY x.id DESC LIMIT 1) AS invoice_id,
+              (SELECT x.status FROM invoices x WHERE x.project_id = p.id AND x.status <> 'void' ORDER BY x.id DESC LIMIT 1) AS invoice_status,
               p.status, p.priority, p.start_date, p.due_date, p.completed_at, p.created_at, p.client_id,
               c.name AS client_name, c.company_name AS client_company,
               pp.name AS pipeline_name, s.name AS service_name,
@@ -296,6 +299,7 @@ export class ProjectFlowService {
       return {
         ...p,
         monthly_deliverables: parseJson(p.monthly_deliverables, []),
+        retainer_auto_invoice: Boolean(p.retainer_auto_invoice),
         step_total: ps.length,
         step_done: ps.filter((s) => s.status === 'completed').length,
         current_step: current ? current.name : null,
@@ -571,7 +575,67 @@ export class ProjectFlowService {
     } finally {
       conn.release();
     }
-    return { id: cycleId, created: true };
+    const invoiceId = await this.#autoDraftRetainerInvoice(parent, cycleId, cycleMonth);
+    return { id: cycleId, created: true, invoiceId };
+  }
+
+  /**
+   * Retainers with a monthly fee and auto-invoicing on get a draft GST invoice for each new cycle (dated the 1st).
+   * Never fails the cycle: problems are logged, and a cycle that already has an invoice is left alone.
+   */
+  static async #autoDraftRetainerInvoice(parent, cycleId, cycleMonth) {
+    if (!parent.retainer_auto_invoice || !(Number(parent.billing_amount) > 0)) return null;
+    try {
+      const [[existing]] = await pool.query("SELECT id FROM invoices WHERE project_id = ? AND status <> 'void' LIMIT 1", [cycleId]);
+      if (existing) return existing.id;
+      const [[svc]] = parent.service_id ? await pool.query('SELECT name FROM services WHERE id = ?', [parent.service_id]) : [[null]];
+      const deliverables = parseJson(parent.monthly_deliverables, []);
+      const doc = await FinanceService.createDraft(
+        {
+          invoiceType: parent.retainer_invoice_type || 'INV',
+          clientId: parent.client_id,
+          projectId: cycleId,
+          invoiceDate: `${cycleMonth}-01`,
+          notes: `Monthly retainer for ${cycleLabel(cycleMonth)}.`,
+          items: [{
+            serviceId: parent.service_id || null,
+            description: `${svc?.name || parent.name} — ${cycleLabel(cycleMonth)}`,
+            details: deliverables.length ? deliverables.map((d) => `${d.qty} ${d.label}`).join('\n') : null,
+            quantity: 1,
+            unitPrice: Number(parent.billing_amount),
+            discountAmount: 0
+          }]
+        },
+        { id: parent.project_manager_id || parent.created_by },
+        null
+      );
+      return doc.invoice.id;
+    } catch (e) {
+      console.error(`Retainer auto-invoice failed for project ${parent.id} (${cycleMonth}):`, e.message);
+      return null;
+    }
+  }
+
+  /** Monthly fee + auto-invoicing for a regular retainer. Admins / project managers or the client's account manager. */
+  static async updateRetainerBilling(projectId, { amount, invoiceType, autoInvoice }, actor, req) {
+    const project = await this.#loadProjectForAction(projectId);
+    if (project.project_category !== 'regular' || project.parent_project_id) {
+      throw httpError(400, 'Monthly billing is set on the regular retainer, not on a monthly cycle', 'NOT_RETAINER');
+    }
+    if (!hasFullAccess(actor) && Number(project.account_manager_id) !== Number(actor.id)) {
+      throw httpError(403, "Only admins or the client's account manager can set retainer billing", 'FORBIDDEN');
+    }
+    if (invoiceType === 'INC') {
+      const [[c]] = await pool.query('SELECT c.gstin FROM projects p JOIN clients c ON c.id = p.client_id WHERE p.id = ?', [projectId]);
+      if (!c?.gstin) throw httpError(400, "INC invoices need the client's GSTIN — add it in Client GST Profiles first", 'CLIENT_GSTIN_REQUIRED');
+    }
+    if (autoInvoice && !(Number(amount) > 0)) throw httpError(400, 'Set a monthly fee before turning on automatic invoices', 'AMOUNT_REQUIRED');
+    await pool.query(
+      'UPDATE projects SET billing_amount = ?, retainer_invoice_type = ?, retainer_auto_invoice = ? WHERE id = ?',
+      [amount ?? null, invoiceType || 'INV', Boolean(autoInvoice), projectId]
+    );
+    await AuditService.log({ actorId: actor.id, action: 'project.retainer_billing', entityType: 'project', entityId: projectId, details: { amount, invoiceType, autoInvoice }, req });
+    return this.viewProject(projectId, actor);
   }
 
   /** API entry point: only people who manage the retainer may create a cycle early. */

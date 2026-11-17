@@ -65,6 +65,13 @@ router.patch(
   UsersController.changeStatus
 );
 
+router.delete(
+  '/users/:id',
+  requirePermission('users.delete'),
+  csrfProtection,
+  UsersController.deleteUser
+);
+
 router.get(
   '/users/:id/teams',
   requirePermission('users.view_teams'),

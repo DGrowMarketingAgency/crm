@@ -1372,9 +1372,9 @@ function ExecutiveLeadershipDashboard({ user, isOwner, hasPermission }) {
           </div>
         </Link>
 
-        {/* Card 5: BD Pipelines & Leads */}
+        {/* Card 5: Enquiries & leads */}
         <Link
-          to="/leads"
+          to="/sales/leads"
           className="group bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm hover:border-[#e3272e]/50 hover:shadow-md transition-all flex flex-col justify-between"
         >
           <div className="flex items-center justify-between text-slate-400 group-hover:text-[#e3272e]">
@@ -1388,7 +1388,7 @@ function ExecutiveLeadershipDashboard({ user, isOwner, hasPermission }) {
               {leadsCount}
             </span>
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mt-0.5">
-              BD Pipeline Leads
+              Enquiries & Leads
             </span>
           </div>
         </Link>

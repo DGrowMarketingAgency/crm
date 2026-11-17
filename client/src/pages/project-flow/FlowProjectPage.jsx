@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { CheckCircle2, Circle, Loader2, ShieldCheck, Pencil, Undo2, Repeat, CalendarPlus, ListChecks, Check } from 'lucide-react';
-import { projectFlowService } from '../../services/api';
+import { CheckCircle2, Circle, Loader2, ShieldCheck, Pencil, Undo2, Repeat, CalendarPlus, ListChecks, Check, IndianRupee } from 'lucide-react';
+import { projectFlowService, financeService } from '../../services/api';
 import { usePermission } from '../../hooks/usePermission';
 import {
   CategoryBadge,
@@ -18,6 +18,52 @@ import {
   btnSecondary
 } from './flowUi';
 import { PeoplePicker } from './PeoplePicker';
+
+/** Monthly fee + automatic draft invoice for each new cycle of a regular retainer. */
+function RetainerBillingCard({ project, canEdit, onSaved }) {
+  const [f, setF] = useState({
+    amount: project.billing_amount ?? '',
+    invoiceType: project.retainer_invoice_type || 'INV',
+    autoInvoice: Boolean(project.retainer_auto_invoice)
+  });
+  const [msg, setMsg] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    setSaving(true);
+    setMsg(null);
+    try {
+      const res = await financeService.setRetainerBilling(project.id, { amount: f.amount === '' ? null : Number(f.amount), invoiceType: f.invoiceType, autoInvoice: f.autoInvoice });
+      onSaved(res.data.project);
+      setMsg({ ok: true, text: 'Saved.' });
+    } catch (err) {
+      setMsg({ ok: false, text: errorMessage(err) });
+    } finally {
+      setSaving(false);
+    }
+  };
+  const gst = f.invoiceType === 'IND' ? 0 : Math.round(Number(f.amount || 0) * 0.18);
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+      <h2 className="font-black text-slate-900 flex items-center gap-2"><IndianRupee className="w-4 h-4 text-emerald-600" /> Monthly billing</h2>
+      <p className="text-xs text-slate-500 mb-3">When on, each new monthly cycle gets a draft invoice dated the 1st, ready to review and issue.</p>
+      <fieldset disabled={!canEdit} className="grid sm:grid-cols-[160px_220px_1fr_auto] gap-3 items-end">
+        <label className="block"><span className="text-xs font-bold text-slate-600">Monthly fee ₹</span>
+          <input type="number" min="0" className={inputCls} value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} placeholder="e.g. 15000" /></label>
+        <label className="block"><span className="text-xs font-bold text-slate-600">Invoice type</span>
+          <select className={inputCls} value={f.invoiceType} onChange={(e) => setF({ ...f, invoiceType: e.target.value })}>
+            <option value="INV">INV · GST invoice</option><option value="INC">INC · GST, registered client</option><option value="IND">IND · Non-GST</option>
+          </select></label>
+        <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 pb-2">
+          <input type="checkbox" checked={f.autoInvoice} onChange={(e) => setF({ ...f, autoInvoice: e.target.checked })} /> Draft an invoice every month
+        </label>
+        {canEdit && <button className={btnPrimary} onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>}
+      </fieldset>
+      {Number(f.amount) > 0 && <p className="text-xs text-slate-500 mt-2">Each month: ₹{Number(f.amount).toLocaleString('en-IN')} {f.invoiceType === 'IND' ? '(no GST)' : `+ ₹${gst.toLocaleString('en-IN')} GST = ₹${(Number(f.amount) + gst).toLocaleString('en-IN')}`}</p>}
+      {!canEdit && <p className="text-xs text-slate-400 mt-2">Only admins or the client's account manager can change this.</p>}
+      {msg && <p className={`text-sm font-semibold mt-2 ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`} role={msg.ok ? 'status' : 'alert'}>{msg.text}</p>}
+    </div>
+  );
+}
 
 function StepIcon({ step }) {
   if (step.status === 'completed') return <CheckCircle2 className="w-6 h-6 text-emerald-500" />;
@@ -371,12 +417,23 @@ export function FlowProjectPage() {
                         {c.current_step ? `Now: ${c.current_step}` : c.status === 'completed' ? 'Complete' : '—'} · Tasks {c.task_done}/{c.task_total}
                       </p>
                     </div>
-                    <StatusBadge status={c.status} />
+                    <div className="flex flex-col items-end gap-1">
+                      <StatusBadge status={c.status} />
+                      {c.invoice_id && <span className="text-[11px] font-bold text-blue-700">Invoice {c.invoice_status === 'draft' ? 'drafted' : c.invoice_status?.replace('_', ' ')}</span>}
+                    </div>
                   </button>
                 ))}
                 {project.cycles.length === 0 && <p className="text-sm text-slate-400">No cycles yet.</p>}
               </div>
             </div>
+          )}
+
+          {isTemplate && <RetainerBillingCard project={project} canEdit={isAdmin} onSaved={setProject} />}
+
+          {!isTemplate && project.invoice_id && (
+            <Link to={`/finance/invoices/${project.invoice_id}`} className="block rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+              {project.invoice_status === 'draft' ? 'A draft invoice is ready for this project — review and issue it →' : `Invoice for this project: ${project.invoice_status.replace('_', ' ')} →`}
+            </Link>
           )}
 
           <div>

@@ -78,6 +78,7 @@ export class NotificationsService {
    */
   static async createNotification({
     recipientUserId,
+    userId, // older callers pass userId; treated as recipientUserId
     actorUserId = null,
     type,
     title,
@@ -90,7 +91,12 @@ export class NotificationsService {
     emailText = null,
     db = pool
   }) {
+    recipientUserId = recipientUserId || userId;
     if (!recipientUserId) return null;
+    // action_url and entity_type are NOT NULL; fall back to the notifications page.
+    actionUrl = actionUrl || '/notifications';
+    entityType = entityType || type || 'general';
+    entityId = entityId || 0;
 
     // Check preferences
     const prefs = await this.getPreferences(recipientUserId, db);

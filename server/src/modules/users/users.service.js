@@ -44,9 +44,11 @@ export class UsersService {
       params.push(`%${search.trim()}%`, `%${search.trim()}%`);
     }
 
-    if (status.trim()) {
-      whereClauses.push('u.status = ?');
-      params.push(status.trim());
+    // One status, or several separated by commas (e.g. "inactive,suspended").
+    const statuses = status.split(',').map((s) => s.trim()).filter(Boolean);
+    if (statuses.length) {
+      whereClauses.push(`u.status IN (${statuses.map(() => '?').join(', ')})`);
+      params.push(...statuses);
     }
 
     let roleJoin = '';
@@ -390,6 +392,103 @@ export class UsersService {
   /**
    * Changes account status with Session Invalidation and Owner Protection
    */
+  /**
+   * Permanently deletes a deactivated user.
+   *
+   * Rows that only belong to the user (sessions, memberships, timers, their
+   * notifications…) are removed by ON DELETE CASCADE, and soft references
+   * (audit actor, lead owner…) become NULL. Records other people rely on —
+   * payslips, invoices, payments, tasks they created, projects they manage,
+   * chat messages — use RESTRICT / NO ACTION keys; if any exist the delete is
+   * refused and the user should stay deactivated so that history is intact.
+   */
+  static async deleteUser(targetUserId, actorUser, req = null) {
+    const target = await this.getUserById(targetUserId);
+
+    if (Number(target.id) === Number(actorUser.id)) {
+      const e = new Error('You cannot delete your own account.');
+      e.status = 400; e.code = 'CANNOT_DELETE_SELF'; throw e;
+    }
+    if (target.status === 'active') {
+      const e = new Error('Deactivate this user first. Only deactivated users can be deleted.');
+      e.status = 409; e.code = 'USER_STILL_ACTIVE'; throw e;
+    }
+    const isTargetOwner = target.roles.some((r) => r.slug === 'owner') || target.primary_role === 'owner';
+    if (isTargetOwner && !actorUser.isOwner) {
+      const e = new Error('Only an Owner can delete another Owner.');
+      e.status = 403; e.code = 'FORBIDDEN'; throw e;
+    }
+
+    const blockers = await this.#deleteBlockers(targetUserId);
+    if (blockers.length) {
+      const e = new Error(
+        `${target.name} can't be deleted because they are linked to ${blockers.map((b) => `${b.count} ${b.label}`).join(', ')}. ` +
+        'Keep them deactivated — they cannot log in and stay out of the active team list.'
+      );
+      e.status = 409; e.code = 'USER_HAS_HISTORY'; e.details = { blockers }; throw e;
+    }
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query('DELETE FROM users WHERE id = ?', [targetUserId]);
+      await AuditService.log({
+        db: connection,
+        actorId: actorUser.id,
+        action: 'USER_DELETED',
+        entityType: 'users',
+        entityId: Number(targetUserId),
+        details: { name: target.name, email: target.email },
+        req
+      });
+      await connection.commit();
+    } catch (err) {
+      await connection.rollback();
+      if (err.code === 'ER_ROW_IS_REFERENCED_2' || err.code === 'ER_ROW_IS_REFERENCED') {
+        const e = new Error(`${target.name} is still linked to other records, so they can't be deleted. Keep them deactivated.`);
+        e.status = 409; e.code = 'USER_HAS_HISTORY'; throw e;
+      }
+      throw err;
+    } finally {
+      connection.release();
+    }
+    return { deleted: true, id: Number(targetUserId) };
+  }
+
+  static #blockingKeys = null;
+
+  static async #deleteBlockers(userId) {
+    if (!this.#blockingKeys) {
+      const [keys] = await pool.query(
+        `SELECT k.TABLE_NAME AS t, k.COLUMN_NAME AS c
+         FROM information_schema.KEY_COLUMN_USAGE k
+         JOIN information_schema.REFERENTIAL_CONSTRAINTS rc
+           ON rc.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA AND rc.CONSTRAINT_NAME = k.CONSTRAINT_NAME
+         WHERE k.TABLE_SCHEMA = DATABASE() AND k.REFERENCED_TABLE_NAME = 'users'
+           AND rc.DELETE_RULE IN ('RESTRICT', 'NO ACTION')`
+      );
+      this.#blockingKeys = keys;
+    }
+    const LABELS = {
+      payslips: 'payslips', payroll_items: 'payroll entries', payroll_runs: 'payroll runs',
+      employee_salary_assignments: 'salary records', invoices: 'invoices', payments: 'payments',
+      quotations: 'quotations', tasks: 'tasks they created', projects: 'projects they manage',
+      chat_messages: 'chat messages', chat_conversations: 'chats', chat_attachments: 'chat files',
+      support_tickets: 'support tickets', ticket_messages: 'ticket replies', ticket_attachments: 'ticket files',
+      deliverable_submissions: 'deliverable submissions', deliverable_revision_requests: 'revision requests',
+      task_approvals: 'task approvals'
+    };
+    const totals = new Map();
+    for (const { t, c } of this.#blockingKeys) {
+      const [[row]] = await pool.query(`SELECT COUNT(*) AS n FROM \`${t}\` WHERE \`${c}\` = ?`, [userId]);
+      if (row.n > 0) {
+        const label = LABELS[t] || t.replace(/_/g, ' ');
+        totals.set(label, (totals.get(label) || 0) + Number(row.n));
+      }
+    }
+    return [...totals].map(([label, count]) => ({ label, count }));
+  }
+
   static async changeUserStatus(targetUserId, newStatus, actorUser, req = null) {
     const target = await this.getUserById(targetUserId);
 

@@ -12,6 +12,7 @@ import {
   approveSchema,
   requestChangesSchema,
   billingSchema,
+  retainerBillingSchema,
   projectStatusSchema,
   employeeTasksSchema,
   trackerSchema
@@ -62,6 +63,8 @@ router.get('/project-flow/projects/:id', requirePermission('tasks.view'),
   handle(async (req) => ({ project: await S.viewProject(num(req.params.id), req.user) })));
 router.patch('/project-flow/projects/:id/status', requirePermission('tasks.view'), csrfProtection, validate(projectStatusSchema),
   handle(async (req) => ({ project: await S.setProjectStatus(num(req.params.id), req.body.status, req.user, req) })));
+router.put('/project-flow/projects/:id/retainer-billing', requirePermission('tasks.view'), csrfProtection, validate(retainerBillingSchema),
+  handle(async (req) => ({ project: await S.updateRetainerBilling(num(req.params.id), req.body, req.user, req) })));
 router.patch('/project-flow/projects/:id/billing', requirePermission('projects.update'), csrfProtection, validate(billingSchema),
   handle(async (req) => ({ project: await S.updateBilling(num(req.params.id), req.body, req.user, req) })));
 router.post('/project-flow/projects/:id/cycles', requirePermission('tasks.view'), csrfProtection,

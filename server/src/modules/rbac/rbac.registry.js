@@ -715,6 +715,97 @@ export const PERMISSION_REGISTRY = [
     label: 'Void Invoices',
     description: 'Allows voiding eligible invoices through authorized administrative workflow'
   },
+  {
+    key: 'proposals.view',
+    module: 'Proposals',
+    action: 'view',
+    label: 'View Proposals',
+    description: 'View 3-tier sales proposals for leads and clients the user can access'
+  },
+  {
+    key: 'proposals.create',
+    module: 'Proposals',
+    action: 'create',
+    label: 'Create Proposals',
+    description: 'Create and edit 3-tier sales proposals'
+  },
+  {
+    key: 'proposals.send',
+    module: 'Proposals',
+    action: 'send',
+    label: 'Share Proposals',
+    description: 'Share a proposal link with the client'
+  },
+  {
+    key: 'proposals.convert',
+    module: 'Proposals',
+    action: 'convert',
+    label: 'Convert Accepted Proposals',
+    description: 'Onboard the client and create the project and first invoice from an accepted proposal'
+  },
+  {
+    key: 'expenses.view',
+    module: 'Expenses',
+    action: 'view',
+    label: 'View Expenses & EMIs',
+    description: 'See office expenses, purchases, loans and EMI schedules'
+  },
+  {
+    key: 'expenses.manage',
+    module: 'Expenses',
+    action: 'manage',
+    label: 'Manage Expenses & EMIs',
+    description: 'Add, edit and delete expenses and purchases; manage loans and record EMI payments'
+  },
+  {
+    key: 'adfunds.view',
+    module: 'Ad Funds',
+    action: 'view',
+    label: 'View Client Ad Funds',
+    description: 'See client ad-fund wallets, campaigns and statements'
+  },
+  {
+    key: 'adfunds.manage',
+    module: 'Ad Funds',
+    action: 'manage',
+    label: 'Manage Client Ad Funds',
+    description: 'Record client deposits, daily ad spend and refunds; manage campaigns'
+  },
+  {
+    key: 'sales_quotes.view',
+    module: 'Quotations',
+    action: 'view',
+    label: 'View Quotations',
+    description: 'See quotations for the enquiries and clients you can access'
+  },
+  {
+    key: 'sales_quotes.request',
+    module: 'Quotations',
+    action: 'request',
+    label: 'Request Quotations',
+    description: 'Ask for a quotation by listing the services a client wants (no prices)'
+  },
+  {
+    key: 'sales_quotes.price',
+    module: 'Quotations',
+    action: 'price',
+    label: 'Price & Send Quotations',
+    description: 'Add prices, GST and discounts, send quotations to clients and record negotiated revisions'
+  },
+  {
+    key: 'finance.reports.view',
+    module: 'Finance',
+    action: 'view_reports',
+    label: 'View Finance & GST Reports',
+    description: 'Sales register, GST return summary, receivables aging and payments received, with export'
+  },
+  {
+    key: 'finance.settings.manage',
+    module: 'Finance',
+    action: 'manage_settings',
+    label: 'Manage Agency Billing Settings',
+    description: 'Edit agency GST profile, bank / UPI details, signatory, invoice terms and invoice number series'
+  },
 
   // Payments Module (Phase 6)
   {
@@ -1027,6 +1118,13 @@ export const PERMISSION_REGISTRY = [
     label: 'Convert Leads',
     description: 'Allows converting won leads into clients'
   },
+  {
+    key: 'leads.delete',
+    module: 'Leads',
+    action: 'delete',
+    label: 'Delete Leads',
+    description: 'Allows permanently removing enquiries that were never onboarded'
+  },
 
   // D-Grow OS Phase 1: Departments Module
   {
@@ -1296,7 +1394,10 @@ export const DEFAULT_SYSTEM_ROLES = [
       'deliverables.view', 'deliverables.submit', 'deliverables.review_internal', 'deliverables.submit_client', 'deliverables.review_client', 'deliverables.request_revision',
       'tickets.view', 'tickets.create', 'tickets.assign', 'tickets.update', 'tickets.reply', 'tickets.internal_note', 'tickets.resolve',
       'quotations.view', 'quotations.create', 'quotations.update', 'quotations.issue', 'quotations.review_client', 'quotations.convert',
-      'invoices.view', 'invoices.create', 'invoices.issue', 'invoices.void',
+      'invoices.view', 'invoices.create', 'invoices.issue', 'invoices.void', 'finance.settings.manage', 'finance.reports.view',
+      'proposals.view', 'proposals.create', 'proposals.send', 'proposals.convert', 'leads.delete',
+      'sales_quotes.view', 'sales_quotes.request', 'sales_quotes.price',
+      'expenses.view', 'expenses.manage', 'adfunds.view', 'adfunds.manage',
       'payments.view', 'payments.record',
       'chat.view', 'chat.create_direct', 'chat.create_group', 'chat.send', 'chat.manage_members',
       'notifications.view', 'notifications.manage_own', 'notifications.manage_preferences',
@@ -1462,6 +1563,8 @@ export const DEFAULT_SYSTEM_ROLES = [
       'payments.view', 'payments.record',
       'chat.view', 'chat.create_direct', 'chat.create_group', 'chat.send', 'chat.manage_members',
       'leads.view', 'leads.create', 'leads.update', 'leads.convert',
+      'proposals.view', 'proposals.create', 'proposals.send', 'proposals.convert',
+      'sales_quotes.view', 'sales_quotes.request', 'adfunds.view', 'adfunds.manage',
       'time_entries.view_own', 'time_entries.create', 'time_entries.update_own',
       'timers.start', 'timers.stop_own', 'timers.view_own',
       'timesheets.view_own', 'timesheets.submit',
@@ -1478,6 +1581,8 @@ export const DEFAULT_SYSTEM_ROLES = [
     is_system: true,
     permissionKeys: [
       'leads.view', 'leads.create', 'leads.update',
+      // Marketing people never set prices: they view proposals and request quotations; the admin prices them.
+      'proposals.view', 'sales_quotes.view', 'sales_quotes.request',
       'tasks.view', 'tasks.change_status',
       'task_comments.view', 'task_comments.create',
       'time_entries.view_own', 'time_entries.create',
@@ -1620,6 +1725,17 @@ export const DEFAULT_SYSTEM_ROLES = [
       'chat.view', 'chat.create_direct', 'chat.create_group', 'chat.send', 'chat.manage_members',
       'notifications.view', 'notifications.manage_own', 'notifications.manage_preferences',
       'reports.view_dashboard',
+      'permissions.view'
+    ]
+  },
+  {
+    name: 'Auditor',
+    slug: 'auditor',
+    description: 'External or internal auditor with read-only access to invoices, payments and GST / finance reports.',
+    is_system: true,
+    permissionKeys: [
+      'invoices.view', 'payments.view', 'finance.reports.view', 'expenses.view', 'adfunds.view',
+      'notifications.view', 'notifications.manage_own',
       'permissions.view'
     ]
   }

@@ -1488,10 +1488,10 @@ export function ClientWorkspacePage() {
               <p className="text-xs text-slate-500">Financial records, approved estimates, and payment history</p>
             </div>
             <Link
-              to="/billing"
+              to={`/finance/invoices?search=${encodeURIComponent(client.company_name || client.name || '')}`}
               className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition"
             >
-              <CreditCard className="w-3.5 h-3.5 text-[#047857]" /> Go to Billing Desk
+              <CreditCard className="w-3.5 h-3.5 text-[#047857]" /> Open GST invoices
             </Link>
           </div>
 

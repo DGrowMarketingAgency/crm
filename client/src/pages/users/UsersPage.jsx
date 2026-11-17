@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { usersService, rbacService } from '../../services/api';
 import { usePermission } from '../../hooks/usePermission';
+import { useAuth } from '../../hooks/useAuth';
 import { UserModal } from './UserModal';
 import { InviteUserModal } from './InviteUserModal';
 import { InvitationsModal } from './InvitationsModal';
@@ -20,11 +21,14 @@ import {
   CheckCircle,
   Clock,
   MoreVertical,
-  Check
+  Check,
+  Trash2,
+  UserX
 } from 'lucide-react';
 
 export function UsersPage() {
   const { hasPermission, isOwner } = usePermission();
+  const { user: currentUser } = useAuth();
 
   const [users, setUsers] = useState([]);
   const [total, setTotal] = useState(0);
@@ -33,7 +37,11 @@ export function UsersPage() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
+  // Two lists: the working team, and accounts that can no longer log in.
+  const [tab, setTab] = useState('active');
+  const [counts, setCounts] = useState({ active: null, deactivated: null });
+  const TAB_STATUS = { active: 'active,on_leave', deactivated: 'inactive,suspended' };
+  const selectedStatus = TAB_STATUS[tab];
   const [rolesList, setRolesList] = useState([]);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -58,6 +66,7 @@ export function UsersPage() {
   const canUpdate = isOwner || hasPermission('users.update');
   const canChangeStatus = isOwner || hasPermission('users.change_status');
   const canManageRoles = isOwner || hasPermission('roles.assign_users');
+  const canDelete = isOwner || hasPermission('users.delete');
 
   useEffect(() => {
     loadRoles();
@@ -85,14 +94,50 @@ export function UsersPage() {
         role: selectedRole,
         status: selectedStatus,
         limit,
-        offset: (page - 1) * limit
+        offset: (page - 1) * limit,
+        // Client portal logins belong to their client, not the agency team.
+        staffOnly: true
       });
       setUsers(res.data.users || []);
       setTotal(res.data.total || 0);
+      loadCounts();
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Failed to fetch users.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadCounts = async () => {
+    try {
+      const [a, d] = await Promise.all(
+        ['active', 'deactivated'].map((k) => usersService.getUsers({ status: TAB_STATUS[k], staffOnly: true, limit: 1, offset: 0 }))
+      );
+      setCounts({ active: a.data.total || 0, deactivated: d.data.total || 0 });
+    } catch {
+      /* counts are a nicety; the list still works without them */
+    }
+  };
+
+  const handleDelete = async (targetUser) => {
+    const isActive = targetUser.status === 'active' || targetUser.status === 'on_leave';
+    const prompt = isActive
+      ? `Delete ${targetUser.name} (${targetUser.email})?\n\nThey will be signed out and deactivated, then permanently deleted. ` +
+        'If they have payroll, billing, task or chat history, they stay deactivated instead so that history is kept.'
+      : `Permanently delete ${targetUser.name} (${targetUser.email})? This cannot be undone.`;
+    if (!window.confirm(prompt)) return;
+    setError('');
+    try {
+      // The server only deletes deactivated accounts, so deactivate first.
+      if (isActive) await usersService.changeStatus(targetUser.id, 'inactive');
+      await usersService.deleteUser(targetUser.id);
+      setNotice(`${targetUser.name} was deleted.`);
+      setTimeout(() => setNotice(''), 4000);
+    } catch (err) {
+      const msg = err.response?.data?.error?.message || err.response?.data?.message || 'Failed to delete user.';
+      setError(isActive && err.response?.data?.error?.code === 'USER_HAS_HISTORY' ? `${msg} They have been moved to the Deactivated tab.` : msg);
+    } finally {
+      fetchUsers();
     }
   };
 
@@ -175,6 +220,44 @@ export function UsersPage() {
         </div>
       )}
 
+      {/* Active / Deactivated lists */}
+      <div role="tablist" aria-label="User lists" className="flex gap-1 border-b border-slate-200">
+        {[
+          ['active', 'Active team', UsersIcon],
+          ['deactivated', 'Deactivated', UserX]
+        ].map(([key, label, Icon]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => {
+              setTab(key);
+              setPage(1);
+            }}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 -mb-px transition-colors ${
+              tab === key ? 'border-brand-700 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Icon className="w-4 h-4" />
+            {label}
+            {counts[key] !== null && (
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${tab === key ? 'bg-brand-50 text-brand-700' : 'bg-slate-100 text-slate-500'}`}>
+                {counts[key]}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'deactivated' && (
+        <p className="text-xs text-slate-500 -mt-2">
+          Deactivated users can't log in. Set them back to Active to restore access, or delete them permanently.
+          Users with payroll, billing, task or chat history can't be deleted, so that history stays intact.
+          A user deleted from the Active team list is deactivated first.
+        </p>
+      )}
+
       {/* Filters Toolbar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="relative flex-1 w-full max-w-md">
@@ -202,26 +285,11 @@ export function UsersPage() {
             className="px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-700"
           >
             <option value="">All Roles</option>
-            {rolesList.map((r) => (
+            {rolesList.filter((r) => r.slug !== 'client').map((r) => (
               <option key={r.id} value={r.slug}>
                 {r.name}
               </option>
             ))}
-          </select>
-
-          {/* Status Filter */}
-          <select
-            value={selectedStatus}
-            onChange={(e) => {
-              setSelectedStatus(e.target.value);
-              setPage(1);
-            }}
-            className="px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-700"
-          >
-            <option value="">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="suspended">Suspended</option>
           </select>
 
           <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
@@ -406,6 +474,18 @@ export function UsersPage() {
                             <option value="inactive">Inactive</option>
                             <option value="suspended">Suspended</option>
                           </select>
+                        )}
+
+                        {canDelete && Number(u.id) !== Number(currentUser?.id) && (
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(u)}
+                            title="Delete user permanently"
+                            aria-label={`Delete ${u.name}`}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-700 hover:bg-red-50 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         )}
                       </div>
                     </td>

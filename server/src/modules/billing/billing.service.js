@@ -151,9 +151,9 @@ export class BillingService {
       await connection.commit();
 
       await AuditService.log({
-        userId: actorUser.id,
+        actorId: actorUser.id,
         action: 'QUOTATION_CREATED',
-        entity: 'quotations',
+        entityType: 'quotations',
         entityId: quotationId,
         details: { quotationNumber, totalAmount, clientId }
       });
@@ -280,9 +280,9 @@ export class BillingService {
     );
 
     await AuditService.log({
-      userId: actorUser.id,
+      actorId: actorUser.id,
       action: 'QUOTATION_ISSUED',
-      entity: 'quotations',
+      entityType: 'quotations',
       entityId: quotationId,
       details: { quotationNumber: quotation.quotation_number, clientId: quotation.client_id }
     });
@@ -294,12 +294,14 @@ export class BillingService {
     );
     for (const u of clientUsers) {
       await NotificationsService.createNotification({
-        userId: u.id,
+        recipientUserId: u.id,
+        actorUserId: actorUser.id,
         title: 'New Quotation Received',
         message: `Quotation ${quotation.quotation_number} ("${quotation.title}") has been issued for your review.`,
         type: 'billing',
         entityType: 'quotation',
-        entityId: quotationId
+        entityId: quotationId,
+        actionUrl: '/billing'
       });
     }
 
@@ -338,12 +340,14 @@ export class BillingService {
       );
 
       await NotificationsService.createNotification({
-        userId: quotation.prepared_by,
+        recipientUserId: quotation.prepared_by,
+        actorUserId: actorUser.id,
         title: 'Quotation Accepted by Client!',
         message: `Client accepted quotation ${quotation.quotation_number} (${quotation.currency} ${quotation.total_amount}).`,
         type: 'billing',
         entityType: 'quotation',
-        entityId: quotationId
+        entityId: quotationId,
+        actionUrl: '/billing'
       });
     } else if (decision === 'reject') {
       await pool.query(
@@ -354,21 +358,23 @@ export class BillingService {
       );
 
       await NotificationsService.createNotification({
-        userId: quotation.prepared_by,
+        recipientUserId: quotation.prepared_by,
+        actorUserId: actorUser.id,
         title: 'Quotation Rejected',
         message: `Client rejected quotation ${quotation.quotation_number}. Reason: "${rejectionReason || 'None'}"`,
         type: 'billing',
         entityType: 'quotation',
-        entityId: quotationId
+        entityId: quotationId,
+        actionUrl: '/billing'
       });
     } else {
       throw { status: 400, message: 'Invalid decision. Must be "accept" or "reject"' };
     }
 
     await AuditService.log({
-      userId: actorUser.id,
+      actorId: actorUser.id,
       action: decision === 'accept' ? 'QUOTATION_ACCEPTED' : 'QUOTATION_REJECTED',
-      entity: 'quotations',
+      entityType: 'quotations',
       entityId: quotationId,
       details: { decision, rejectionReason }
     });
@@ -466,9 +472,9 @@ export class BillingService {
       await connection.commit();
 
       await AuditService.log({
-        userId: actorUser.id,
+        actorId: actorUser.id,
         action: 'QUOTATION_CONVERTED_TO_INVOICE',
-        entity: 'invoices',
+        entityType: 'invoices',
         entityId: invoiceId,
         details: { quotationId, invoiceNumber }
       });
@@ -603,9 +609,9 @@ export class BillingService {
       await connection.commit();
 
       await AuditService.log({
-        userId: actorUser.id,
+        actorId: actorUser.id,
         action: 'INVOICE_CREATED',
-        entity: 'invoices',
+        entityType: 'invoices',
         entityId: invoiceId,
         details: { invoiceNumber, totalAmount, clientId }
       });
@@ -742,9 +748,9 @@ export class BillingService {
     );
 
     await AuditService.log({
-      userId: actorUser.id,
+      actorId: actorUser.id,
       action: 'INVOICE_ISSUED',
-      entity: 'invoices',
+      entityType: 'invoices',
       entityId: invoiceId,
       details: { invoiceNumber: invoice.invoice_number, clientId: invoice.client_id }
     });
@@ -772,9 +778,9 @@ export class BillingService {
     );
 
     await AuditService.log({
-      userId: actorUser.id,
+      actorId: actorUser.id,
       action: 'INVOICE_VOIDED',
-      entity: 'invoices',
+      entityType: 'invoices',
       entityId: invoiceId,
       details: { invoiceNumber: invoice.invoice_number }
     });
@@ -826,7 +832,7 @@ export class BillingService {
       }
 
       const paymentReference = await this.generateNumber(connection, 'payments', 'payment_reference', 'PAY');
-      const validMethods = ['bank_transfer', 'upi', 'cash', 'card', 'payment_gateway', 'other'];
+      const validMethods = ['bank_transfer', 'upi', 'cash', 'card', 'cheque', 'payment_gateway', 'other'];
       const method = validMethods.includes(data.paymentMethod) ? data.paymentMethod : 'bank_transfer';
 
       // Insert payment record
@@ -864,24 +870,31 @@ export class BillingService {
       await connection.commit();
 
       await AuditService.log({
-        userId: actorUser.id,
+        actorId: actorUser.id,
         action: 'PAYMENT_RECORDED',
-        entity: 'payments',
+        entityType: 'payments',
         entityId: paymentId,
         details: { paymentReference, amount, invoiceId, nextStatus }
       });
 
-      // Notify Account Manager and client contacts
-      const [clientUsers] = await pool.query('SELECT id FROM users WHERE client_id = ?', [invoice.client_id]);
-      for (const u of clientUsers) {
-        await NotificationsService.createNotification({
-          userId: u.id,
-          title: 'Payment Received',
-          message: `Payment of ${invoice.currency} ${amount} recorded for invoice ${invoice.invoice_number}.`,
-          type: 'billing',
-          entityType: 'invoice',
-          entityId: invoiceId
-        });
+      // Notify client contacts. The payment is already committed, so a
+      // notification failure must not turn it into an error for the user.
+      try {
+        const [clientUsers] = await pool.query('SELECT id FROM users WHERE client_id = ?', [invoice.client_id]);
+        for (const u of clientUsers) {
+          await NotificationsService.createNotification({
+            recipientUserId: u.id,
+            actorUserId: actorUser.id,
+            title: 'Payment Received',
+            message: `Payment of ${invoice.currency} ${amount} recorded for invoice ${invoice.invoice_number}.`,
+            type: 'billing',
+            entityType: 'invoice',
+            entityId: invoiceId,
+            actionUrl: '/billing'
+          });
+        }
+      } catch (notifyErr) {
+        console.error('[billing] payment notification failed:', notifyErr.message);
       }
 
       return this.getInvoiceDetails(actorUser, invoiceId);

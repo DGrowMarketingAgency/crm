@@ -28,6 +28,9 @@ import hrRoutes from './modules/hr/hr.routes.js';
 import calendarRoutes from './modules/calendar/calendar.routes.js';
 import credentialsRoutes from './modules/credentials/credentials.routes.js';
 import projectFlowRoutes from './modules/project-flow/projectFlow.routes.js';
+import financeRoutes from './modules/finance/finance.routes.js';
+import expensesRoutes from './modules/expenses/expenses.routes.js';
+import salesRoutes, { publicSalesRouter } from './modules/sales/sales.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -98,6 +101,9 @@ app.get('/api/health', async (req, res) => {
 // Authentication Routes
 app.use('/api/auth', authRoutes);
 
+// Public, no-login endpoints (shared proposal links). Must come before routers that authenticate every /api request.
+app.use('/api/public', publicSalesRouter);
+
 // RBAC & Permission Management Routes
 app.use('/api', rbacRoutes);
 
@@ -160,6 +166,13 @@ app.use('/api', credentialsRoutes);
 
 // Client project flow: pipelines, project categories, step assignments, employee task desk
 app.use('/api', projectFlowRoutes);
+
+// Finance: GST invoicing, agency billing settings, number series, credit notes
+app.use('/api', financeRoutes);
+app.use('/api', expensesRoutes);
+
+// Sales pipeline: lead follow-ups, meetings, marketers, 3-tier proposals (+ public proposal links)
+app.use('/api', salesRoutes);
 
 // 404 Handler
 app.use((req, res) => {

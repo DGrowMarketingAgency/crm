@@ -60,6 +60,11 @@ export const billingSchema = z.object({
   billingAmount: z.coerce.number().min(0).optional().nullable(),
   billingStatus: z.enum(['unbilled', 'billed', 'paid']).optional()
 });
+export const retainerBillingSchema = z.object({
+  amount: z.union([z.coerce.number().min(0).max(100000000), z.null()]).optional(),
+  invoiceType: z.enum(['INV', 'INC', 'IND']).optional(),
+  autoInvoice: z.boolean()
+});
 export const projectStatusSchema = z.object({ status: z.enum(['planning', 'active', 'on_hold', 'completed', 'cancelled']) });
 
 export const trackerSchema = z.object({ action: z.enum(['start', 'pause', 'complete']) });

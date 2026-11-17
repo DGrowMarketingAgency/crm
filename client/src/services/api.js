@@ -7,7 +7,7 @@ export const API_BASE_URL =
   (window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1")
     ? "/api"
-    : "https://server.dgrowmarketing.in/api");
+    : "https://localhost:5000/api");
 
 // : 'https://server.dgrowmarketing.in/api');
 
@@ -135,6 +135,7 @@ export const usersService = {
   createUser: (data) => api.post("/users", data),
   updateUser: (id, data) => api.put(`/users/${id}`, data),
   changeStatus: (id, status) => api.patch(`/users/${id}/status`, { status }),
+  deleteUser: (id) => api.delete(`/users/${id}`),
   getUserTeams: (id) => api.get(`/users/${id}/teams`),
   createInvitation: (data) => api.post("/invitations", data),
   getInvitations: () => api.get("/invitations"),
@@ -668,6 +669,125 @@ export const projectFlowService = {
     }),
   trackTask: (taskId, action) =>
     api.post(`/project-flow/tasks/${taskId}/tracker`, { action }),
+};
+
+// Finance: GST invoices, agency billing settings, number series, client/service tax fields
+// Miscellaneous: office expenses & purchases, EMI & loans, client ad-fund wallets
+export const expensesService = {
+  lookups: () => api.get("/expenses/lookups"),
+  categories: () => api.get("/expenses/categories"),
+  addCategory: (data) => api.post("/expenses/categories", data),
+  addSubcategory: (id, data) => api.post(`/expenses/categories/${id}/subcategories`, data),
+  list: (params) => api.get("/expenses", { params }),
+  create: (data) => api.post("/expenses", data),
+  update: (id, data) => api.put(`/expenses/${id}`, data),
+  markPaid: (id, data) => api.post(`/expenses/${id}/paid`, data),
+  remove: (id) => api.delete(`/expenses/${id}`)
+};
+
+export const loansService = {
+  list: (params) => api.get("/loans", { params }),
+  dues: (month) => api.get("/loans/dues", { params: { month } }),
+  get: (id) => api.get(`/loans/${id}`),
+  create: (data) => api.post("/loans", data),
+  update: (id, data) => api.put(`/loans/${id}`, data),
+  remove: (id) => api.delete(`/loans/${id}`),
+  close: (id, data) => api.post(`/loans/${id}/close`, data),
+  reopen: (id) => api.post(`/loans/${id}/reopen`),
+  pay: (installmentId, data) => api.post(`/loans/installments/${installmentId}/pay`, data),
+  undo: (installmentId) => api.post(`/loans/installments/${installmentId}/undo`)
+};
+
+export const adFundsService = {
+  summary: (params) => api.get("/ad-funds/summary", { params }),
+  transactions: (params) => api.get("/ad-funds/transactions", { params }),
+  record: (data) => api.post("/ad-funds/transactions", data),
+  dailySpend: (data) => api.post("/ad-funds/daily-spend", data),
+  removeTxn: (id) => api.delete(`/ad-funds/transactions/${id}`),
+  campaigns: (params) => api.get("/ad-funds/campaigns", { params }),
+  createCampaign: (data) => api.post("/ad-funds/campaigns", data),
+  updateCampaign: (id, data) => api.put(`/ad-funds/campaigns/${id}`, data),
+  removeCampaign: (id) => api.delete(`/ad-funds/campaigns/${id}`),
+  statement: (clientId, params) => api.get(`/ad-funds/clients/${clientId}/statement`, { params }),
+  settings: (clientId) => api.get(`/ad-funds/clients/${clientId}/settings`),
+  saveSettings: (clientId, data) => api.put(`/ad-funds/clients/${clientId}/settings`, data)
+};
+
+export const financeService = {
+  getLookups: () => api.get("/finance/lookups"),
+  getSettings: () => api.get("/finance/settings"),
+  updateSettings: (data) => api.put("/finance/settings", data),
+  updateSeries: (code, data) => api.put(`/finance/series/${code}`, data),
+  getClients: (params) => api.get("/finance/clients", { params }),
+  updateClientBilling: (id, data) => api.put(`/finance/clients/${id}/billing`, data),
+  getClientProjects: (id) => api.get(`/finance/clients/${id}/projects`),
+  getServices: () => api.get("/finance/services"),
+  updateServiceTax: (id, data) => api.put(`/finance/services/${id}/tax`, data),
+  listInvoices: (params) => api.get("/finance/invoices", { params }),
+  getInvoice: (id) => api.get(`/finance/invoices/${id}`),
+  createInvoice: (data) => api.post("/finance/invoices", data),
+  updateInvoice: (id, data) => api.put(`/finance/invoices/${id}`, data),
+  issueInvoice: (id) => api.post(`/finance/invoices/${id}/issue`),
+  cancelInvoice: (id, reason) => api.post(`/finance/invoices/${id}/cancel`, { reason }),
+  duplicateInvoice: (id) => api.post(`/finance/invoices/${id}/duplicate`),
+  reversePayment: (id, paymentId, reason) => api.post(`/finance/invoices/${id}/payments/${paymentId}/reverse`, { reason }),
+  recordPayment: (id, data) => api.post(`/invoices/${id}/payments`, data),
+  printUrl: (id) => `${API_BASE_URL}/finance/invoices/${id}/print`,
+  report: (name, params) => api.get(`/finance/reports/${name}`, { params }),
+  reportXlsx: (name, params) =>
+    api.get(`/finance/reports/${name}`, { params: { ...params, format: "xlsx" }, responseType: "blob" }),
+  alerts: () => api.get("/finance/alerts"),
+  runReminders: () => api.post("/finance/alerts/run"),
+  setRetainerBilling: (projectId, data) =>
+    api.put(`/project-flow/projects/${projectId}/retainer-billing`, data),
+};
+
+// Sales pipeline: leads & follow-ups, meetings, marketers, 3-tier proposals
+export const salesService = {
+  dashboard: (params) => api.get("/sales/dashboard", { params }),
+  desk: (params) => api.get("/sales/desk", { params }),
+  owners: () => api.get("/sales/owners"),
+  clients: () => api.get("/sales/clients"),
+  services: () => api.get("/sales/services"),
+  listLeads: (params) => api.get("/sales/leads", { params }),
+  createLead: (data) => api.post("/sales/leads", data),
+  getLead: (id) => api.get(`/sales/leads/${id}`),
+  updateLead: (id, data) => api.put(`/sales/leads/${id}`, data),
+  logInteraction: (id, data) => api.post(`/sales/leads/${id}/interactions`, data),
+  assignLead: (id, ownerUserId) => api.put(`/sales/leads/${id}/owner`, { ownerUserId }),
+  onboardLead: (id, data) => api.post(`/sales/leads/${id}/onboard`, data),
+  deleteLead: (id) => api.delete(`/sales/leads/${id}`),
+  marketers: (params) => api.get("/sales/marketers", { params }),
+  listMeetings: (params) => api.get("/sales/meetings", { params }),
+  createMeeting: (data) => api.post("/sales/meetings", data),
+  updateMeeting: (id, data) => api.put(`/sales/meetings/${id}`, data),
+  listProposals: (params) => api.get("/sales/proposals", { params }),
+  getProposal: (id) => api.get(`/sales/proposals/${id}`),
+  createProposal: (data) => api.post("/sales/proposals", data),
+  updateProposal: (id, data) => api.put(`/sales/proposals/${id}`, data),
+  sendProposal: (id) => api.post(`/sales/proposals/${id}/send`),
+  convertProposal: (id, data) => api.post(`/sales/proposals/${id}/convert`, data),
+  withdrawProposal: (id) => api.post(`/sales/proposals/${id}/withdraw`),
+  duplicateProposal: (id) => api.post(`/sales/proposals/${id}/duplicate`),
+  deleteProposal: (id) => api.delete(`/sales/proposals/${id}`),
+  cancelQuote: (id, reason) => api.post(`/sales/quotes/${id}/cancel`, { reason }),
+  duplicateQuote: (id) => api.post(`/sales/quotes/${id}/duplicate`),
+  deleteQuote: (id) => api.delete(`/sales/quotes/${id}`),
+  // Quotations
+  listQuotes: (params) => api.get("/sales/quotes", { params }),
+  getQuote: (id) => api.get(`/sales/quotes/${id}`),
+  createQuote: (data) => api.post("/sales/quotes", data),
+  updateQuote: (id, data) => api.put(`/sales/quotes/${id}`, data),
+  sendQuote: (id) => api.post(`/sales/quotes/${id}/send`),
+  reviseQuote: (id, data) => api.post(`/sales/quotes/${id}/revise`, data),
+  quoteClientRequest: (id, data) => api.post(`/sales/quotes/${id}/client-request`, data),
+  decideQuote: (id, data) => api.post(`/sales/quotes/${id}/decision`, data),
+  convertQuote: (id, data) => api.post(`/sales/quotes/${id}/convert`, data),
+  quoteFromProposal: (proposalId) => api.post(`/sales/proposals/${proposalId}/quote`),
+  publicQuote: (token) => api.get(`/public/quotes/${token}`),
+  publicQuoteDecision: (token, data) => api.post(`/public/quotes/${token}/decision`, data),
+  publicProposal: (token) => api.get(`/public/proposals/${token}`),
+  decideProposal: (token, data) => api.post(`/public/proposals/${token}/decision`, data),
 };
 
 export default api;
