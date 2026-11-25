@@ -14,6 +14,18 @@ router.get(
   CalendarController.getFilterOptions
 );
 
+// 1b. Content calendar builder: a client's saved pattern, and "build month" (managers only — checked in the service)
+router.get(
+  '/content-plan/:clientId',
+  requirePermission('calendar.view'),
+  CalendarController.getContentPlan
+);
+router.post(
+  '/build',
+  requirePermission('calendar.create'),
+  CalendarController.buildMonth
+);
+
 // 2. Events retrieval (list across permitted clients or specific client)
 router.get(
   '/',

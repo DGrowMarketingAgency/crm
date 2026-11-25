@@ -9,7 +9,6 @@ import {
   updateClientContactSchema,
   onboardingItemSchema,
   updateOnboardingItemSchema,
-  createClientServiceSchema,
   updateClientServiceSchema,
   createOrResetPortalAccountSchema
 } from './clients.validation.js';
@@ -214,19 +213,9 @@ router.delete(
 );
 
 // 11. Client Services
-router.get(
-  '/clients/:id/services',
-  requirePermission('services.view'),
-  ClientsController.getClientServices
-);
-
-router.post(
-  '/clients/:id/services',
-  requirePermission('clients.manage_services'),
-  csrfProtection,
-  validate(createClientServiceSchema),
-  ClientsController.createClientService
-);
+// GET/POST /clients/:id/services are served by the services module (one engine: bundled services become
+// projects in the client's month plan). They used to be shadowed here by the legacy service_instances handlers,
+// which is why bundling from the Clients page never reached the Auto-Trigger Engine.
 
 router.put(
   '/clients/:id/services/:serviceId',

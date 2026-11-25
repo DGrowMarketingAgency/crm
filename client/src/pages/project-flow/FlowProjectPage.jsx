@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { CheckCircle2, Circle, Loader2, ShieldCheck, Pencil, Undo2, Repeat, CalendarPlus, ListChecks, Check, IndianRupee } from 'lucide-react';
+import { CheckCircle2, Circle, Repeat, CalendarPlus, ListChecks, IndianRupee, GitBranch } from 'lucide-react';
 import { projectFlowService, financeService } from '../../services/api';
 import { usePermission } from '../../hooks/usePermission';
 import {
@@ -15,9 +15,55 @@ import {
   humanize,
   inputCls,
   btnPrimary,
-  btnSecondary
+  btnSecondary,
+  monthLabel
 } from './flowUi';
-import { PeoplePicker } from './PeoplePicker';
+import { StepSection } from './StepBoard';
+
+/** Where the project is: Audit ✓ → Strategy (now) → Execution → Reporting, plus the one thing to do next. */
+function StageStepper({ steps, projectDone }) {
+  const current = steps.find((s) => s.status === 'in_progress');
+  const idx = current ? steps.indexOf(current) : -1;
+  const next = idx >= 0 ? steps[idx + 1] : null;
+  const left = current ? current.tasks.filter((t) => t.status !== 'completed').length : 0;
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+      <ol className="flex items-center gap-1 overflow-x-auto pb-1">
+        {steps.map((s, i) => {
+          const done = s.status === 'completed';
+          const now = s.status === 'in_progress';
+          return (
+            <li key={s.id} className="flex items-center gap-1 shrink-0">
+              {i > 0 && <span className={`w-6 h-0.5 ${done || now ? 'bg-emerald-400' : 'bg-slate-200'}`} />}
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
+                  now ? 'bg-blue-600 border-blue-600 text-white' : done ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-slate-200 text-slate-400'
+                }`}
+              >
+                {done ? <CheckCircle2 className="w-3.5 h-3.5" /> : <span className="w-4 h-4 rounded-full border border-current text-[10px] leading-[14px] text-center">{i + 1}</span>}
+                {s.name}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <p className="text-sm text-slate-700 mt-3">
+        {projectDone || !current ? (
+          <span className="font-semibold text-emerald-700">All stages are complete.</span>
+        ) : current.step_type === 'approval' ? (
+          <>
+            <span className="font-bold">Now: {current.name}</span> — waiting for approval before {next ? `“${next.name}”` : 'the project closes'}.
+          </>
+        ) : (
+          <>
+            <span className="font-bold">Now: {current.name}</span> — {left === 0 ? 'all tasks done' : `${left} task${left === 1 ? '' : 's'} left`}
+            {next ? `. When they're done, “${next.name}” starts automatically.` : '. When they’re done, the project is complete.'}
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
 
 /** Monthly fee + automatic draft invoice for each new cycle of a regular retainer. */
 function RetainerBillingCard({ project, canEdit, onSaved }) {
@@ -62,172 +108,6 @@ function RetainerBillingCard({ project, canEdit, onSaved }) {
       {!canEdit && <p className="text-xs text-slate-400 mt-2">Only admins or the client's account manager can change this.</p>}
       {msg && <p className={`text-sm font-semibold mt-2 ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`} role={msg.ok ? 'status' : 'alert'}>{msg.text}</p>}
     </div>
-  );
-}
-
-function StepIcon({ step }) {
-  if (step.status === 'completed') return <CheckCircle2 className="w-6 h-6 text-emerald-500" />;
-  if (step.status === 'in_progress') return <Loader2 className="w-6 h-6 text-blue-500 animate-[spin_3s_linear_infinite]" />;
-  return <Circle className="w-6 h-6 text-slate-300" />;
-}
-
-function StepRow({ step, index, isLast, project, isTemplate, canManage, employees, busy, act }) {
-  const [editing, setEditing] = useState(false);
-  const [people, setPeople] = useState(step.assignees.map((a) => a.id));
-  const [rejecting, setRejecting] = useState(false);
-  const [note, setNote] = useState('');
-  const approval = step.step_type === 'approval';
-  const active = step.status === 'in_progress' && !isTemplate;
-  const openTasks = step.tasks.filter((t) => t.status !== 'completed').length;
-
-  return (
-    <li className="relative pl-10">
-      {!isLast && <span className="absolute left-[11px] top-8 bottom-0 w-0.5 bg-slate-200" aria-hidden />}
-      <span className="absolute left-0 top-1">
-        <StepIcon step={isTemplate ? { status: 'pending' } : step} />
-      </span>
-      <div className={`rounded-2xl border p-4 mb-3 ${active ? 'border-blue-200 bg-blue-50/30 shadow-sm' : approval ? 'border-amber-100 bg-amber-50/20' : 'border-slate-100 bg-white'}`}>
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-black text-slate-400">STEP {index + 1}</span>
-              {approval && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700">
-                  <ShieldCheck className="w-3.5 h-3.5" /> Approval
-                </span>
-              )}
-              {!isTemplate && <StatusBadge status={step.status} />}
-            </div>
-            <h3 className="font-bold text-slate-900 mt-0.5">{step.name}</h3>
-            {step.notes && <p className="text-xs font-semibold text-amber-700 mt-1">{step.notes}</p>}
-            {step.completed_at && !isTemplate && (
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Completed {fmtDate(step.completed_at)}
-                {step.completed_by_name ? ` by ${step.completed_by_name}` : ''}
-              </p>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2 shrink-0">
-            {active && !approval && step.can_complete && (
-              <button
-                className={btnPrimary}
-                disabled={busy}
-                onClick={() => {
-                  if (openTasks > 0 && !window.confirm(`${openTasks} task(s) in this step are still open. Complete the step anyway?`)) return;
-                  act(() => projectFlowService.completeStep(project.id, step.id));
-                }}
-              >
-                <Check className="w-4 h-4" /> Mark step complete
-              </button>
-            )}
-            {active && approval && canManage && (
-              <>
-                {Boolean(step.needs_admin_approval) && !step.admin_approved_at && (
-                  <button className={btnPrimary} disabled={busy} onClick={() => act(() => projectFlowService.approveStep(project.id, step.id, 'admin'))}>
-                    <ShieldCheck className="w-4 h-4" /> Admin approve
-                  </button>
-                )}
-                {Boolean(step.needs_client_approval) && !step.client_approved_at && (
-                  <button className={btnPrimary} disabled={busy} onClick={() => act(() => projectFlowService.approveStep(project.id, step.id, 'client'))}>
-                    <ShieldCheck className="w-4 h-4" /> Client approved
-                  </button>
-                )}
-                <button className={btnSecondary} disabled={busy} onClick={() => setRejecting((v) => !v)}>
-                  <Undo2 className="w-4 h-4" /> Request changes
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {rejecting && active && approval && (
-          <div className="mt-3 rounded-xl border border-amber-200 bg-white p-3">
-            <label className="block">
-              <span className="text-xs font-bold text-slate-600">What needs to change? The work goes back to the previous work step.</span>
-              <textarea className={`${inputCls} mt-1`} rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Client wants a different headline on the home page" />
-            </label>
-            <div className="flex justify-end gap-2 mt-2">
-              <button className={btnSecondary} onClick={() => setRejecting(false)}>
-                Cancel
-              </button>
-              <button
-                className={btnPrimary}
-                disabled={busy}
-                onClick={async () => {
-                  const ok = await act(() => projectFlowService.requestChanges(project.id, step.id, note.trim() || null));
-                  if (ok) {
-                    setRejecting(false);
-                    setNote('');
-                  }
-                }}
-              >
-                Send back for rework
-              </button>
-            </div>
-          </div>
-        )}
-
-        {approval && !isTemplate && (
-          <div className="flex flex-wrap gap-3 mt-2 text-[11px] font-semibold">
-            {Boolean(step.needs_admin_approval) && (
-              <span className={step.admin_approved_at ? 'text-emerald-600' : 'text-slate-400'}>
-                Admin: {step.admin_approved_at ? `approved by ${step.admin_approved_by_name}` : 'pending'}
-              </span>
-            )}
-            {Boolean(step.needs_client_approval) && (
-              <span className={step.client_approved_at ? 'text-emerald-600' : 'text-slate-400'}>
-                Client: {step.client_approved_at ? `approved (recorded by ${step.client_approved_by_name})` : 'pending'}
-              </span>
-            )}
-          </div>
-        )}
-
-        <div className="mt-3 flex items-center gap-2 flex-wrap">
-          {editing ? (
-            <div className="flex flex-wrap items-center gap-2 w-full">
-              <PeoplePicker employees={employees} value={people} onChange={setPeople} ariaLabel={`Assign people to ${step.name}`} />
-              <button
-                className={btnPrimary}
-                disabled={busy || people.length === 0}
-                onClick={async () => {
-                  const ok = await act(() => projectFlowService.setStepAssignees(project.id, step.id, people));
-                  if (ok) setEditing(false);
-                }}
-              >
-                Save
-              </button>
-              <button className={btnSecondary} onClick={() => setEditing(false)}>
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <>
-              <PeopleStack people={step.assignees} />
-              {canManage && step.status !== 'completed' && (
-                <button onClick={() => setEditing(true)} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700" aria-label={`Reassign ${step.name}`}>
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </>
-          )}
-        </div>
-
-        {step.tasks.length > 0 && (
-          <ul className="mt-3 space-y-1">
-            {step.tasks.map((t) => (
-              <li key={t.id} className="flex items-center gap-2 text-xs">
-                {t.status === 'completed' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <Circle className="w-3.5 h-3.5 text-slate-300" />}
-                <Link to={`/tasks/${t.id}`} className={`font-semibold hover:text-red-600 ${t.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700'}`}>
-                  {t.title}
-                </Link>
-                {t.target_qty && <span className="text-slate-400">×{t.target_qty}</span>}
-                <span className="text-slate-400">· {t.assignee_name}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </li>
   );
 }
 
@@ -285,7 +165,7 @@ export function FlowProjectPage() {
     }
   };
 
-  const isTemplate = project?.project_category === 'regular' && !project?.parent_project_id;
+  const isTemplate = project?.project_category === 'regular' && !project?.parent_project_id && !project?.month_plan_id;
   const nextMonth = (() => {
     const d = new Date();
     d.setMonth(d.getMonth() + 1);
@@ -302,6 +182,9 @@ export function FlowProjectPage() {
               { label: 'Client Projects', to: canBrowseClients ? '/client-projects' : undefined },
               { label: project.client_company || project.client_name || 'Client', to: canBrowseClients && project.client_id ? `/client-projects/${project.client_id}` : undefined },
               ...(project.parent_project_id ? [{ label: 'Retainer', to: `/flow-projects/${project.parent_project_id}` }] : []),
+              ...(project.month_plan_id
+                ? [{ label: monthLabel(project.cycle_month), to: canBrowseClients ? `/month-plans/${project.month_plan_id}` : undefined }]
+                : []),
               { label: project.name }
             ]}
           />
@@ -316,10 +199,9 @@ export function FlowProjectPage() {
                 </div>
                 <h1 className="text-2xl font-black text-slate-900 mt-2">{project.name}</h1>
                 <p className="text-sm text-slate-500 mt-1">
-                  {project.assignment_mode === 'team' ? 'Team project' : 'Individual project'} · {project.assignment_mode === 'team' ? 'Leader' : 'Owner'}:{' '}
-                  <span className="font-semibold text-slate-700">{project.team_leader_name || '—'}</span>
-                  {project.pipeline_name ? ` · Pipeline: ${project.pipeline_name}` : ''}
+                  {project.assignment_mode === 'team' ? 'Leader' : 'Owner'}: <span className="font-semibold text-slate-700">{project.team_leader_name || '—'}</span>
                   {project.service_name ? ` · ${project.service_name}` : ''}
+                  {project.pipeline_name && project.pipeline_name !== project.service_name ? ` · ${project.pipeline_name} flow` : ''}
                 </p>
                 {project.description && <p className="text-sm text-slate-600 mt-2 max-w-3xl">{project.description}</p>}
                 <p className="text-xs text-slate-400 mt-2">
@@ -437,15 +319,23 @@ export function FlowProjectPage() {
           )}
 
           <div>
-            <h2 className="font-black text-slate-900 mb-1">{isTemplate ? 'Step template & assignments (copied into each month)' : 'Project pipeline'}</h2>
-            {isTemplate && <p className="text-xs text-slate-500 mb-3">Changing people here affects future months; the current month's cycle keeps its own assignments.</p>}
-            <ol className="mt-3">
+            {isTemplate ? (
+              <div>
+                <h2 className="font-black text-slate-900 flex items-center gap-2">
+                  <GitBranch className="w-4 h-4 text-red-600" /> Step template & assignments (copied into each month)
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">Changing people here affects future months; the current month's cycle keeps its own assignments.</p>
+              </div>
+            ) : (
+              <StageStepper steps={project.steps} projectDone={project.status === 'completed'} />
+            )}
+            <ol className="mt-4">
               {project.steps.map((s, i) => (
-                <StepRow
+                <StepSection
                   key={s.id}
                   step={s}
                   index={i}
-                  isLast={i === project.steps.length - 1}
+                  steps={project.steps}
                   project={project}
                   isTemplate={isTemplate}
                   canManage={canManage}

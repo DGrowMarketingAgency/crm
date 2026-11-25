@@ -44,10 +44,9 @@ export class CalendarService {
 
     const client = rows[0];
 
-    if (!ClientsService.isGlobalViewer(actorUser)) {
+    if (!this.isCalendarGlobal(actorUser)) {
       const userSlugs = actorUser.roles?.map((r) => r.slug) || [];
       const isClientRole = userSlugs.includes('client') || actorUser.client_id;
-      const isAM = userSlugs.includes('account-manager') || actorUser.role === 'account_manager';
 
       if (isClientRole) {
         if (Number(actorUser.client_id) !== Number(clientId)) {
@@ -55,15 +54,83 @@ export class CalendarService {
           err.status = 403;
           throw err;
         }
-      } else if (isAM) {
-        if (Number(client.account_manager_id) !== Number(actorUser.id)) {
-          const err = new Error('Access denied: You are not the assigned Account Manager for this client');
+      } else if (Number(client.account_manager_id) !== Number(actorUser.id)) {
+        // Staff see the calendars of clients they actually work on (Master Plan §3.2 — assigned work only).
+        const mine = await this.staffClientIds(actorUser);
+        if (!mine.includes(Number(clientId))) {
+          const err = new Error('Access denied: You do not work on this client');
           err.status = 403;
           throw err;
         }
       }
     }
 
+    return client;
+  }
+
+  /** Owner / admin / leadership / project managers see every client's calendar. */
+  static isCalendarGlobal(user) {
+    return ClientsService.isGlobalViewer(user) || (user?.roles || []).some((r) => r.slug === 'project-manager');
+  }
+
+  /** Clients a staff member works on: projects they lead, manage, are a member of, or have steps/tasks in — or calendar items assigned to them. */
+  static async staffClientIds(user) {
+    const u = Number(user.id);
+    const [rows] = await pool.query(
+      `SELECT DISTINCT p.client_id AS id FROM projects p
+       WHERE p.is_archived = 0 AND p.client_id IS NOT NULL AND (
+         p.project_manager_id = ? OR p.team_leader_id = ?
+         OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ?)
+         OR EXISTS (SELECT 1 FROM project_steps ps JOIN project_step_assignees psa ON psa.project_step_id = ps.id WHERE ps.project_id = p.id AND psa.user_id = ?)
+         OR EXISTS (SELECT 1 FROM tasks t WHERE t.project_id = p.id AND t.is_archived = 0 AND t.assignee_id = ?))
+       UNION SELECT DISTINCT ce.client_id FROM calendar_events ce WHERE ce.assigned_to = ?
+       UNION SELECT c.id FROM clients c WHERE c.account_manager_id = ?`,
+      [u, u, u, u, u, u, u]
+    );
+    return rows.map((r) => Number(r.id));
+  }
+
+  /** True for admins / PMs / leadership, or the client's account manager. */
+  static async isCalendarManager(clientId, user) {
+    if (this.isCalendarGlobal(user)) return true;
+    const [[c]] = await pool.query('SELECT account_manager_id FROM clients WHERE id = ?', [clientId]);
+    return Boolean(c) && Number(c.account_manager_id) === Number(user.id);
+  }
+
+  /**
+   * Staff who don't manage the client may only move their own items forward (status, publish link, notes);
+   * changing dates, titles, people or deleting is for managers. Client-portal rules are unchanged.
+   */
+  static async assertCanEditEvent(event, data, user, { deleting = false } = {}) {
+    if (this.isClientPortalUser(user)) return;
+    if (await this.isCalendarManager(event.client_id, user)) return;
+    const mineToWork = Number(event.assigned_to) === Number(user.id);
+    const allowed = new Set(['status', 'publishedUrl', 'internalNotes', 'clientNotes', 'updateScope']);
+    const touchesOther = Object.keys(data || {}).some((k) => data[k] !== undefined && !allowed.has(k));
+    if (deleting || !mineToWork || touchesOther) {
+      const err = new Error(
+        mineToWork && !deleting
+          ? 'You can update the status, publish link and notes of your items; ask the account manager to change anything else'
+          : "Only admins, project managers or this client's account manager can change this calendar item"
+      );
+      err.status = 403;
+      throw err;
+    }
+  }
+
+  /** Building / changing a client's content calendar: admins, project managers, or the client's account manager. */
+  static async assertCanManageCalendar(clientId, user) {
+    const client = await this.verifyClientAccess(clientId, user);
+    if (this.isClientPortalUser(user)) {
+      const err = new Error('Clients cannot change the content calendar');
+      err.status = 403;
+      throw err;
+    }
+    if (!this.isCalendarGlobal(user) && Number(client.account_manager_id) !== Number(user.id)) {
+      const err = new Error("Only admins, project managers or this client's account manager can build its content calendar");
+      err.status = 403;
+      throw err;
+    }
     return client;
   }
 
@@ -133,14 +200,12 @@ export class CalendarService {
       whereClauses.push('ce.client_id = ?');
       params.push(clientId);
     } else {
-      // Scoped across accessible clients
-      if (!ClientsService.isGlobalViewer(actorUser)) {
-        const userSlugs = actorUser.roles?.map((r) => r.slug) || [];
-        const isAM = userSlugs.includes('account-manager') || actorUser.role === 'account_manager';
-        if (isAM) {
-          whereClauses.push('c.account_manager_id = ?');
-          params.push(actorUser.id);
-        }
+      // Scoped across accessible clients: everyone except global viewers sees only the clients they work on
+      // (or account-manage) plus items assigned to them.
+      if (!this.isCalendarGlobal(actorUser)) {
+        const mine = await this.staffClientIds(actorUser);
+        whereClauses.push('(ce.client_id IN (?) OR ce.assigned_to = ?)');
+        params.push(mine.length ? mine : [0], actorUser.id);
       }
     }
 
@@ -438,6 +503,12 @@ export class CalendarService {
    */
   static async createEvent(data, actorUser, req = null) {
     const client = await this.verifyClientAccess(data.clientId, actorUser);
+    // Staff need to manage the client to add calendar items (client-portal rules unchanged).
+    if (!this.isClientPortalUser(actorUser) && !(await this.isCalendarManager(data.clientId, actorUser))) {
+      const err = new Error("Only admins, project managers or this client's account manager can add to its content calendar");
+      err.status = 403;
+      throw err;
+    }
 
     const category = this.deriveCategory(data.eventType, data.eventCategory);
     let linkedTaskId = data.taskId || null;
@@ -684,6 +755,7 @@ export class CalendarService {
    */
   static async updateEvent(eventId, data, actorUser) {
     const currentEvent = await this.getEventById(eventId, actorUser);
+    await this.assertCanEditEvent(currentEvent, data, actorUser);
 
     const updateScope = data.updateScope || 'single';
     const fieldsToUpdate = {};
@@ -807,6 +879,7 @@ export class CalendarService {
    */
   static async deleteEvent(eventId, { deleteScope = 'single' }, actorUser) {
     const currentEvent = await this.getEventById(eventId, actorUser);
+    await this.assertCanEditEvent(currentEvent, {}, actorUser, { deleting: true });
 
     if (deleteScope === 'series' && currentEvent.recurrence_id) {
       await pool.query(
@@ -833,6 +906,7 @@ export class CalendarService {
    */
   static async recordPublication(eventId, { publishedUrl, notes }, actorUser) {
     const currentEvent = await this.getEventById(eventId, actorUser);
+    await this.assertCanEditEvent(currentEvent, { status: 'published', publishedUrl }, actorUser);
 
     await pool.query(
       `UPDATE calendar_events
@@ -858,6 +932,190 @@ export class CalendarService {
   /**
    * Retrieves filter options (categories, types, platforms, clients, departments)
    */
+  // ───────────────────────── Content calendar builder (Master Plan §8 Social Media Management) ─────────────────────────
+
+  static #days(csv, fallback) {
+    const list = String(csv ?? '')
+      .split(',')
+      .filter((d) => d.trim() !== '')
+      .map((d) => Number(d))
+      .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+    return list.length ? [...new Set(list)] : fallback;
+  }
+
+  /** A client's saved content settings, or the document's default pattern (Reels Sat/Sun/Wed, Posts Mon/Tue/Thu). */
+  static async getContentPlan(clientId, actorUser) {
+    const client = await this.verifyClientAccess(clientId, actorUser);
+    const [[row]] = await pool.query('SELECT * FROM client_content_plans WHERE client_id = ?', [clientId]);
+    const pillars = row?.pillars ? (typeof row.pillars === 'string' ? JSON.parse(row.pillars) : row.pillars) : [];
+    return {
+      client_id: Number(clientId),
+      client_name: client.company_name || client.name,
+      reels_per_month: Number(row?.reels_per_month || 0),
+      posts_per_month: Number(row?.posts_per_month || 0),
+      reel_days: this.#days(row?.reel_days, [6, 0, 3]),
+      post_days: this.#days(row?.post_days, [1, 2, 4]),
+      platform: row?.platform || 'Instagram',
+      pillars: Array.isArray(pillars) ? pillars : [],
+      default_assignee_id: row?.default_assignee_id || null,
+      client_visible: row ? Boolean(row.client_visible) : true,
+      saved: Boolean(row),
+      can_manage: await this.isCalendarManager(clientId, actorUser)
+    };
+  }
+
+  /**
+   * Spreads `count` items evenly over the month's dates that fall on `weekdays` (0 = Sunday … 6 = Saturday),
+   * from today onward for the current month. More items than dates → some dates get two.
+   */
+  static #spread(month, weekdays, count, fromYmd) {
+    if (!count) return [];
+    const [y, m] = month.split('-').map(Number);
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const dates = [];
+    for (let d = 1; d <= last; d += 1) {
+      const ymd = `${month}-${String(d).padStart(2, '0')}`;
+      if (ymd < fromYmd) continue;
+      if (weekdays.includes(new Date(Date.UTC(y, m - 1, d)).getUTCDay())) dates.push(ymd);
+    }
+    if (!dates.length) return [];
+    const out = [];
+    for (let i = 0; i < count; i += 1) out.push(dates[Math.floor((i * dates.length) / count) % dates.length]);
+    return out.sort();
+  }
+
+  /**
+   * Builds a client's month: N Reels on the Reel days + M Posts on the Post days, titled by rotating content pillars.
+   * dryRun returns the plan without saving. Saving also remembers these settings for next month.
+   */
+  static async buildMonthCalendar(data, actorUser, req = null) {
+    const client = await this.assertCanManageCalendar(data.clientId, actorUser);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (data.month < today.slice(0, 7)) {
+      const err = new Error('That month is already over — pick this month or a later one');
+      err.status = 400;
+      throw err;
+    }
+    const from = data.month === today.slice(0, 7) ? today : `${data.month}-01`;
+    const reelDays = this.#days(data.reelDays?.join(','), []);
+    const postDays = this.#days(data.postDays?.join(','), []);
+    if (data.reels && !reelDays.length) {
+      const err = new Error('Pick at least one day for Reels');
+      err.status = 400;
+      throw err;
+    }
+    if (data.posts && !postDays.length) {
+      const err = new Error('Pick at least one day for Posts');
+      err.status = 400;
+      throw err;
+    }
+    const pillars = (data.pillars || []).map((p) => String(p).trim()).filter(Boolean).slice(0, 20);
+
+    // Continue numbering after what this month already has.
+    const [[existing]] = await pool.query(
+      `SELECT SUM(event_type = 'Reel') AS reels, SUM(event_type = 'Static Post') AS posts FROM calendar_events
+       WHERE client_id = ? AND event_date BETWEEN ? AND LAST_DAY(?) AND status <> 'cancelled'`,
+      [data.clientId, `${data.month}-01`, `${data.month}-01`]
+    );
+    const haveReels = Number(existing?.reels || 0);
+    const havePosts = Number(existing?.posts || 0);
+    let pillarIdx = 0;
+    const nextPillar = () => (pillars.length ? pillars[pillarIdx++ % pillars.length] : null);
+    const items = [
+      ...this.#spread(data.month, reelDays, data.reels || 0, from).map((date, i) => ({ kind: 'reel', date, n: haveReels + i + 1 })),
+      ...this.#spread(data.month, postDays, data.posts || 0, from).map((date, i) => ({ kind: 'post', date, n: havePosts + i + 1 }))
+    ]
+      .sort((a, b) => (a.date === b.date ? (a.kind < b.kind ? 1 : -1) : a.date < b.date ? -1 : 1))
+      .map((it) => {
+        const pillar = nextPillar();
+        return {
+          ...it,
+          pillar,
+          title: `${it.kind === 'reel' ? 'Reel' : 'Post'} ${it.n}${pillar ? ` — ${pillar}` : ''}`,
+          event_type: it.kind === 'reel' ? 'Reel' : 'Static Post',
+          content_format: it.kind === 'reel' ? 'Reel / Short Video' : 'Single Image'
+        };
+      });
+    const short = (data.reels || 0) + (data.posts || 0) - items.length;
+
+    if (data.dryRun) {
+      return { items, existing: { reels: haveReels, posts: havePosts }, not_placed: short };
+    }
+    if (!items.length) {
+      const err = new Error('Nothing to add — set how many Reels or Posts, and the days');
+      err.status = 400;
+      throw err;
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      for (const it of items) {
+        await conn.query(
+          `INSERT INTO calendar_events (client_id, title, event_type, event_category, event_date, is_all_day, assigned_to,
+             platform, content_format, content_summary, status, priority, is_client_visible, created_by)
+           VALUES (?, ?, ?, 'content_publishing', ?, 1, ?, ?, ?, ?, 'planned', 'medium', ?, ?)`,
+          [
+            data.clientId,
+            it.title,
+            it.event_type,
+            it.date,
+            data.assignedTo || null,
+            data.platform || null,
+            it.content_format,
+            it.pillar ? `Pillar: ${it.pillar}` : null,
+            data.clientVisible === false ? 0 : 1,
+            actorUser.id
+          ]
+        );
+      }
+      // Remember this pattern for next month (adjustable per client's shoot days).
+      await conn.query(
+        `INSERT INTO client_content_plans (client_id, reels_per_month, posts_per_month, reel_days, post_days, platform, pillars,
+           default_assignee_id, client_visible, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE reels_per_month = VALUES(reels_per_month), posts_per_month = VALUES(posts_per_month),
+           reel_days = VALUES(reel_days), post_days = VALUES(post_days), platform = VALUES(platform), pillars = VALUES(pillars),
+           default_assignee_id = VALUES(default_assignee_id), client_visible = VALUES(client_visible), updated_by = VALUES(updated_by)`,
+        [
+          data.clientId,
+          data.reels || 0,
+          data.posts || 0,
+          reelDays.join(','),
+          postDays.join(','),
+          data.platform || null,
+          JSON.stringify(pillars),
+          data.assignedTo || null,
+          data.clientVisible === false ? 0 : 1,
+          actorUser.id
+        ]
+      );
+      await conn.commit();
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    } finally {
+      conn.release();
+    }
+    await AuditService.log({
+      actorId: actorUser.id,
+      action: 'calendar.month_built',
+      entityType: 'client',
+      entityId: Number(data.clientId),
+      details: { month: data.month, reels: data.reels, posts: data.posts, created: items.length },
+      req
+    });
+    await ClientsService.logActivity(
+      Number(data.clientId),
+      actorUser.id,
+      'calendar_built',
+      `Content calendar built for ${data.month}`,
+      `${items.filter((i) => i.kind === 'reel').length} Reels and ${items.filter((i) => i.kind === 'post').length} Posts planned for ${client.company_name || client.name}.`
+    );
+    return { created: items.length, items, not_placed: short };
+  }
+
   static async getFilterOptions(actorUser) {
     const isClientUser = this.isClientPortalUser(actorUser);
 
@@ -867,13 +1125,10 @@ export class CalendarService {
     if (isClientUser) {
       clientQuery = 'SELECT id, name, company_name FROM clients WHERE id = ?';
       clientParams = [actorUser.client_id];
-    } else if (!ClientsService.isGlobalViewer(actorUser)) {
-      const userSlugs = actorUser.roles?.map((r) => r.slug) || [];
-      const isAM = userSlugs.includes('account-manager') || actorUser.role === 'account_manager';
-      if (isAM) {
-        clientQuery = 'SELECT id, name, company_name FROM clients WHERE account_manager_id = ? ORDER BY name ASC';
-        clientParams = [actorUser.id];
-      }
+    } else if (!this.isCalendarGlobal(actorUser)) {
+      const mine = await this.staffClientIds(actorUser);
+      clientQuery = 'SELECT id, name, company_name FROM clients WHERE id IN (?) ORDER BY name ASC';
+      clientParams = [mine.length ? mine : [0]];
     }
 
     const [clients] = await pool.query(clientQuery, clientParams);
@@ -889,7 +1144,7 @@ export class CalendarService {
       // Staff only: client-portal accounts must not appear as assignable staff.
       `SELECT u.id, u.name, u.email, u.role, u.department FROM users u
        WHERE u.status = 'active' AND u.role <> 'client' AND u.client_id IS NULL
-         AND NOT EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id AND r.slug = 'client')
+         AND NOT EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id AND r.slug IN ('client', 'freelance-videographer'))
        ORDER BY u.name ASC`
     );
 

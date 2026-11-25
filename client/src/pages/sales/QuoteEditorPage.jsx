@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Plus, Trash2, Send, Save, Copy, MessageCircle, ExternalLink, Handshake, CheckCircle2, XCircle, History, Lock, Pencil, CopyPlus, Ban } from 'lucide-react';
+import { Plus, Trash2, Send, Save, Copy, MessageCircle, ExternalLink, Handshake, CheckCircle2, XCircle, History, Lock, Pencil, CopyPlus, Ban, Printer } from 'lucide-react';
 import { salesService, projectFlowService } from '../../services/api';
 import { usePermission } from '../../hooks/usePermission';
 import { Breadcrumbs, PageState, errorMessage, fmtDate, inputCls, btnPrimary, btnSecondary } from '../project-flow/flowUi';
@@ -255,6 +255,9 @@ export function QuoteEditorPage() {
               </div>
               {q && (
                 <div className="flex items-center gap-2">
+                  {q.status !== 'requested' && (
+                    <a className={btnSecondary} href={salesService.quotePrintUrl(q.id)} target="_blank" rel="noreferrer"><Printer className="w-4 h-4" /> Print / PDF</a>
+                  )}
                   {can?.editSent && !editingSent && (
                     <button className={btnSecondary} onClick={() => setEditingSent(true)}><Pencil className="w-4 h-4" /> Edit quotation</button>
                   )}

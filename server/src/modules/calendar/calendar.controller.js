@@ -3,10 +3,31 @@ import {
   createEventSchema,
   updateEventSchema,
   listEventsQuerySchema,
-  publishEventSchema
+  publishEventSchema,
+  buildCalendarSchema
 } from './calendar.validation.js';
 
 export class CalendarController {
+  /** GET /api/calendar/content-plan/:clientId — saved Reel/Post pattern + pillars (or the default pattern). */
+  static async getContentPlan(req, res, next) {
+    try {
+      res.json({ success: true, data: await CalendarService.getContentPlan(Number(req.params.clientId), req.user) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/calendar/build — plan a month of Reels and Posts (dryRun to preview). */
+  static async buildMonth(req, res, next) {
+    try {
+      const data = buildCalendarSchema.parse(req.body);
+      const result = await CalendarService.buildMonthCalendar(data, req.user, req);
+      res.status(data.dryRun ? 200 : 201).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   /**
    * GET /api/calendar
    */

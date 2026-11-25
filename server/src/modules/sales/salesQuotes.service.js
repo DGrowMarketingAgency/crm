@@ -672,6 +672,38 @@ export class SalesQuotesService {
     return { clientId, projectId: project?.id || null, invoiceId: doc.invoice.id, ...(await this.get(id, actor)) };
   }
 
+  // ───────────── printable quotation ─────────────
+
+  /** Everything the printed quotation needs: party address/phone (client or lead), items, totals. */
+  static async #printPayload(q) {
+    if (q.status === 'requested') throw httpError(409, 'This quotation has not been priced yet', 'NOT_PRICED');
+    const [[party]] = await pool.query(
+      `SELECT COALESCE(c.company_name, c.name, l.company_name, l.title) AS party_name,
+              COALESCE(c.billing_address, c.address) AS party_address, c.city AS party_city, c.pincode AS party_pincode,
+              c.state AS party_state, c.state_code AS client_state_code, c.gstin AS client_gstin,
+              COALESCE(c.phone, l.phone) AS party_phone, COALESCE(c.email, l.email) AS party_email, l.contact_name
+       FROM sales_quotations q LEFT JOIN leads l ON l.id = q.lead_id LEFT JOIN clients c ON c.id = q.client_id
+       WHERE q.id = ?`,
+      [q.id]
+    );
+    const [items] = await pool.query('SELECT * FROM sales_quotation_items WHERE quotation_id = ? ORDER BY sort_order, id', [q.id]);
+    const agencyState = await this.#agencyState();
+    const totals = quoteTotals(items, {
+      gstMode: q.gst_mode, discountAmount: q.discount_amount, placeStateCode: party?.client_state_code || agencyState, agencyStateCode: agencyState
+    });
+    const expired = OPEN.includes(q.status) && q.valid_until && dateStr(q.valid_until) < todayIso();
+    return { q: { ...q, ...party, expired: Boolean(expired) }, items, totals };
+  }
+
+  static async printData(id, actor) {
+    return this.#printPayload(await this.#load(id, actor));
+  }
+
+  /** The client's copy from the public link (does not count as a view). */
+  static async publicPrintData(token) {
+    return this.#printPayload(await this.#publicLoad(token));
+  }
+
   // ───────────── public client link ─────────────
 
   static async #publicLoad(token) {

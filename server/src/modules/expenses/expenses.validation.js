@@ -87,3 +87,23 @@ export const campaignSchema = z.object({
   startDate: optDate,
   notes: optText(1000)
 });
+
+// Borrowed money (from a person; returned in any amounts)
+export const borrowingSchema = z.object({
+  lenderName: z.string().trim().min(2, 'Who did you borrow from?').max(150),
+  lenderPhone: optText(20),
+  amount: money,
+  borrowedOn: isoDate,
+  receivedMode: mode,
+  purpose: optText(255),
+  returnBy: optDate,
+  notes: optText(2000)
+});
+
+export const borrowingReturnSchema = z.object({
+  amount: money,
+  paidOn: isoDate,
+  paymentMode: mode,
+  reference: optText(100),
+  notes: optText(255)
+});

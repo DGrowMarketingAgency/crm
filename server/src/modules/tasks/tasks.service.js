@@ -763,6 +763,13 @@ export class TasksService {
         } catch (autoErr) {
           console.error('Trigger D evaluation error:', autoErr);
         }
+        // Project stages finish themselves once all their tasks are done (stage-by-stage flow).
+        try {
+          const { ProjectFlowService } = await import('../project-flow/projectFlow.service.js');
+          await ProjectFlowService.afterTaskChange(taskId, actorUser?.id || null);
+        } catch (flowErr) {
+          console.error('Project stage auto-advance error:', flowErr);
+        }
       }
 
       return this.getTaskById(taskId, actorUser);

@@ -33,6 +33,12 @@ function TaskSplitter({ steps, defaultStepId, onSubmit, busy }) {
       setError('Write at least one task');
       return;
     }
+    // Every task needs a person and a due date (Master Plan §5.4).
+    const undated = rows.findIndex((r) => r.title.trim() && !r.dueDate);
+    if (undated >= 0) {
+      setError(`Task ${undated + 1}: pick a due date`);
+      return;
+    }
     const ok = await onSubmit(tasks);
     if (ok === true) setRows([blankRow(defaultStepId), blankRow(defaultStepId), blankRow(defaultStepId)]);
     else if (ok) setError(ok);
@@ -43,7 +49,7 @@ function TaskSplitter({ steps, defaultStepId, onSubmit, busy }) {
       <h2 className="font-black text-slate-900 flex items-center gap-2">
         <ListPlus className="w-4 h-4 text-red-600" /> Split work into tasks
       </h2>
-      <p className="text-xs text-slate-500 mb-3">e.g. “10 competitors of each area”, “100 keywords”, “Test the keywords”. Empty rows are ignored.</p>
+      <p className="text-xs text-slate-500 mb-3">Each task needs a due date. Empty rows are ignored.</p>
       <div className="space-y-2">
         <div className="hidden md:grid grid-cols-[24px_1fr_180px_80px_140px_100px_32px] gap-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
           <span />

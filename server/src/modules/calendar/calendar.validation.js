@@ -186,6 +186,21 @@ export const listEventsQuerySchema = z.object({
   includeTasks: z.string().optional() // 'true' to also fetch tasks with due dates in this range
 });
 
+const weekday = z.coerce.number().int().min(0).max(6);
+export const buildCalendarSchema = z.object({
+  clientId: z.coerce.number().int().positive(),
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Month must be YYYY-MM'),
+  reels: z.coerce.number().int().min(0).max(60).default(0),
+  posts: z.coerce.number().int().min(0).max(60).default(0),
+  reelDays: z.array(weekday).max(7).default([6, 0, 3]),
+  postDays: z.array(weekday).max(7).default([1, 2, 4]),
+  platform: z.string().max(64).optional().nullable(),
+  pillars: z.array(z.string().trim().max(80)).max(20).optional(),
+  assignedTo: z.coerce.number().int().positive().optional().nullable(),
+  clientVisible: z.boolean().optional(),
+  dryRun: z.boolean().optional()
+}).refine((d) => d.reels + d.posts > 0, { message: 'Set how many Reels or Posts to plan', path: ['reels'] });
+
 export const publishEventSchema = z.object({
   publishedUrl: z.string().url('A valid URL is required for recorded publication').max(512).optional().or(z.literal('')),
   notes: z.string().optional()

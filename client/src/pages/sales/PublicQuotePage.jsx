@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Loader2, CheckCircle2, Handshake, XCircle } from 'lucide-react';
+import { Loader2, CheckCircle2, Handshake, XCircle, Printer } from 'lucide-react';
 import { salesService } from '../../services/api';
 
 const inr = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -64,6 +64,10 @@ export function PublicQuotePage() {
               <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Quotation</div>
               <div className="font-mono font-black text-slate-900">{q.number}</div>
               <div className="text-xs text-slate-500">Date {fmt(q.quoteDate)}{q.validUntil ? ` · valid till ${fmt(q.validUntil)}` : ''}</div>
+              <a href={salesService.publicQuotePrintUrl(token)} target="_blank" rel="noreferrer"
+                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                <Printer className="w-3.5 h-3.5" /> Download / Print PDF
+              </a>
             </div>
           </div>
           <div className="mt-4">

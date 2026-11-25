@@ -4,20 +4,54 @@ import { projectFlowService, servicesService } from '../../services/api';
 import { usePermission } from '../../hooks/usePermission';
 import { PageState, Empty, errorMessage, inputCls, btnPrimary, btnSecondary } from './flowUi';
 
-const blankStep = () => ({ key: Math.random().toString(36).slice(2), name: '', description: '', stepType: 'work', needsAdminApproval: true, needsClientApproval: true, estDays: '' });
+const blankStep = () => ({ key: Math.random().toString(36).slice(2), name: '', description: '', stepType: 'work', needsAdminApproval: true, needsClientApproval: true, estDays: '', tasks: [] });
 
 function StepChip({ step, index }) {
   const approval = step.step_type === 'approval';
+  const n = step.task_templates?.length || 0;
   return (
     <div className="flex items-center gap-2">
       {index > 0 && <span className="text-slate-300">→</span>}
       <span
+        title={n ? step.task_templates.map((t) => `• ${t.title}`).join('\n') : undefined}
         className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border whitespace-nowrap ${
           approval ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-slate-50 text-slate-700 border-slate-200'
         }`}
       >
         {index + 1}. {step.name}
+        {n > 0 && <span className="ml-1 text-slate-400 font-bold">· {n} task{n === 1 ? '' : 's'}</span>}
       </span>
+    </div>
+  );
+}
+
+/** Default tasks created on every project that uses this step: title + whether the client reviews it. */
+function StepTaskTemplates({ tasks, onChange, stepName }) {
+  const set = (j, patch) => onChange(tasks.map((t, k) => (k === j ? { ...t, ...patch } : t)));
+  return (
+    <div className="md:col-span-3 rounded-lg bg-slate-50/80 border border-slate-100 p-2 space-y-1.5">
+      <p className="text-[11px] font-bold text-slate-500">Default tasks · created automatically on every project</p>
+      {tasks.map((t, j) => (
+        <div key={j} className="flex items-center gap-2">
+          <input
+            className={`${inputCls} !py-1 !text-xs`}
+            value={t.title}
+            onChange={(e) => set(j, { title: e.target.value })}
+            placeholder="Task title"
+            aria-label={`${stepName || 'Step'} default task ${j + 1}`}
+            maxLength={255}
+          />
+          <label className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 whitespace-nowrap" title="The client reviews this deliverable">
+            <input type="checkbox" checked={Boolean(t.clientReview)} onChange={(e) => set(j, { clientReview: e.target.checked })} /> Client review
+          </label>
+          <button type="button" onClick={() => onChange(tasks.filter((_, k) => k !== j))} className="p-1 rounded hover:bg-red-50 text-red-500" aria-label={`Remove default task ${j + 1}`}>
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ))}
+      <button type="button" onClick={() => onChange([...tasks, { title: '', clientReview: false, role: null }])} className="text-[11px] font-bold text-slate-600 hover:text-red-600 inline-flex items-center gap-1">
+        <Plus className="w-3 h-3" /> Default task
+      </button>
     </div>
   );
 }
@@ -35,7 +69,8 @@ function PipelineEditor({ pipeline, services, onClose, onSaved }) {
           stepType: s.step_type,
           needsAdminApproval: Boolean(s.needs_admin_approval),
           needsClientApproval: Boolean(s.needs_client_approval),
-          estDays: s.est_days ?? ''
+          estDays: s.est_days ?? '',
+          tasks: (s.task_templates || []).map((t) => ({ title: t.title, clientReview: Boolean(t.clientReview), role: t.role || null }))
         }))
       : [blankStep()]
   );
@@ -74,7 +109,8 @@ function PipelineEditor({ pipeline, services, onClose, onSaved }) {
         stepType: s.stepType,
         needsAdminApproval: s.needsAdminApproval,
         needsClientApproval: s.needsClientApproval,
-        estDays: s.estDays === '' ? null : Number(s.estDays)
+        estDays: s.estDays === '' ? null : Number(s.estDays),
+        taskTemplates: (s.tasks || []).filter((t) => t.title.trim()).map((t) => ({ title: t.title.trim(), clientReview: Boolean(t.clientReview), role: t.role || null }))
       }))
     };
     try {
@@ -162,6 +198,7 @@ function PipelineEditor({ pipeline, services, onClose, onSaved }) {
                           </label>
                         </div>
                       )}
+                      <StepTaskTemplates tasks={s.tasks || []} stepName={s.name} onChange={(tasks) => update(i, { tasks })} />
                     </div>
                     <div className="flex flex-col">
                       <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="p-1 rounded hover:bg-slate-100 disabled:opacity-30" aria-label="Move up">
@@ -285,6 +322,7 @@ export function PipelinesPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-black text-slate-900">{p.name}</h3>
                       {p.service_name && <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">{p.service_name}</span>}
+                      {p.template_key && <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700" title="Seeded from the D-Grow service playbook — edit freely">Standard</span>}
                       {p.status === 'archived' && <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-200 text-slate-600">Archived</span>}
                     </div>
                     <p className="text-xs text-slate-500 mt-1">

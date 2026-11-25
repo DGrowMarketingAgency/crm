@@ -7,9 +7,10 @@ import { isClientPortalUser } from '../project-flow/projectFlow.service.js';
 import { ExpensesService as E } from './expenses.service.js';
 import { LoansService as L } from './loans.service.js';
 import { AdFundsService as A } from './adfunds.service.js';
+import { BorrowingsService as B } from './borrowings.service.js';
 import {
   categorySchema, subcategorySchema, expenseSchema, markPaidSchema, loanSchema, closeLoanSchema, payEmiSchema,
-  adTxnSchema, dailySpendSchema, campaignSchema, walletSettingsSchema
+  adTxnSchema, dailySpendSchema, campaignSchema, walletSettingsSchema, borrowingSchema, borrowingReturnSchema
 } from './expenses.validation.js';
 
 const router = Router();
@@ -18,7 +19,7 @@ const staffOnly = (req, res, next) => {
   if (isClientPortalUser(req.user)) return res.status(403).json({ success: false, error: { message: 'Not available for client accounts', code: 'FORBIDDEN' } });
   next();
 };
-router.use(['/expenses', '/loans', '/ad-funds'], authenticate, staffOnly);
+router.use(['/expenses', '/loans', '/ad-funds', '/borrowings'], authenticate, staffOnly);
 
 const handle = (fn, status = 200) => async (req, res, next) => {
   try {
@@ -62,6 +63,15 @@ router.post('/loans/installments/:id/pay', ...MANAGE, validate(payEmiSchema), ha
 router.post('/loans/installments/:id/undo', ...MANAGE, handle(async (req) => L.undoPayment(id(req), req.user, req)));
 
 // Client ad funds
+// Borrowed money (same access as expenses)
+router.get('/borrowings', VIEW, handle(async (req) => B.list({ status: String(req.query.status || ''), search: String(req.query.search || '') })));
+router.post('/borrowings', ...MANAGE, validate(borrowingSchema), handle(async (req) => B.create(req.body, req.user, req), 201));
+router.get('/borrowings/:id', VIEW, handle(async (req) => B.get(id(req))));
+router.put('/borrowings/:id', ...MANAGE, validate(borrowingSchema), handle(async (req) => B.update(id(req), req.body, req.user, req)));
+router.delete('/borrowings/:id', ...MANAGE, handle(async (req) => B.remove(id(req), req.user, req)));
+router.post('/borrowings/:id/returns', ...MANAGE, validate(borrowingReturnSchema), handle(async (req) => B.addReturn(id(req), req.body, req.user, req), 201));
+router.delete('/borrowings/returns/:id', ...MANAGE, handle(async (req) => B.removeReturn(id(req), req.user, req)));
+
 router.get('/ad-funds/summary', AD_VIEW, handle(async (req) => A.summary(req.query)));
 router.get('/ad-funds/transactions', AD_VIEW, handle(async (req) => ({ transactions: await A.transactions(req.query) })));
 router.post('/ad-funds/transactions', ...AD_MANAGE, validate(adTxnSchema), handle(async (req) => A.record(req.body, req.user, req), 201));

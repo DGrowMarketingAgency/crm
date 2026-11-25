@@ -7,7 +7,7 @@ export const API_BASE_URL =
   (window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1")
     ? "/api"
-    : "https://localhost:5000/api");
+    : "https://server.dgrowmarketing.in/api");
 
 // : 'https://server.dgrowmarketing.in/api');
 
@@ -600,6 +600,47 @@ export const hrService = {
   getPayslip: (id) => api.get(`/hr/payslips/${id}`),
 };
 
+// Video shoots: videographer availability (own calendar) + managers' "who's free" view
+export const shootsService = {
+  getAvailability: (params) => api.get("/shoots/availability", { params }),
+  addAvailability: (data) => api.post("/shoots/availability", data),
+  removeAvailability: (id) => api.delete(`/shoots/availability/${id}`),
+  clearDay: (data) => api.post("/shoots/availability/clear-day", data),
+  submitMonth: (data) => api.post("/shoots/availability/submit", data),
+  getBoard: (params) => api.get("/shoots/board", { params }),
+  getVideographers: (params) => api.get("/shoots/videographers", { params }),
+  getCandidates: () => api.get("/shoots/videographers/candidates"),
+  addVideographer: (data) => api.post("/shoots/videographers", data),
+  updateVideographer: (userId, data) => api.patch(`/shoots/videographers/${userId}`, data),
+  // Shoot slots (Phase 2)
+  getSlots: (params) => api.get("/shoots/slots", { params }),
+  getSlot: (id) => api.get(`/shoots/slots/${id}`),
+  whoIsFree: (params) => api.get("/shoots/slots/free", { params }),
+  createSlot: (data) => api.post("/shoots/slots", data),
+  updateSlot: (id, data) => api.patch(`/shoots/slots/${id}`, data),
+  cancelSlot: (id, data) => api.post(`/shoots/slots/${id}/cancel`, data),
+  assignSlot: (id, userId) => api.post(`/shoots/slots/${id}/assign`, { userId }),
+  unassignSlot: (id, userId, reason) => api.post(`/shoots/slots/${id}/unassign`, { userId, reason }),
+  getOpenSlots: () => api.get("/shoots/slots/open"),
+  getMySlots: (params) => api.get("/shoots/slots/mine", { params }),
+  acceptSlot: (id) => api.post(`/shoots/slots/${id}/accept`),
+  withdrawSlot: (id, reason) => api.post(`/shoots/slots/${id}/withdraw`, { reason }),
+  markAttendance: (id, userId, attendance) => api.post(`/shoots/slots/${id}/attendance`, { userId, attendance }),
+  // Date proposals (Phase 3): team offers dates, client picks one in the portal
+  getProposals: (params) => api.get("/shoots/proposals", { params }),
+  getProposal: (id) => api.get(`/shoots/proposals/${id}`),
+  createProposal: (data) => api.post("/shoots/proposals", data),
+  withdrawProposal: (id) => api.post(`/shoots/proposals/${id}/withdraw`),
+  getClientProposals: () => api.get("/shoots/client/proposals"),
+  respondProposal: (id, data) => api.post(`/shoots/client/proposals/${id}/respond`, data),
+  // After the shoot (Phase 4): project link, footage, payouts
+  getClientProjects: (clientId) => api.get("/shoots/client-projects", { params: { clientId } }),
+  submitFootage: (id, data) => api.post(`/shoots/slots/${id}/footage`, data),
+  getPayouts: (params) => api.get("/shoots/payouts", { params }),
+  payPayout: (bookingId, data) => api.post(`/shoots/payouts/${bookingId}/pay`, data),
+  getMyPayouts: () => api.get("/shoots/my-payouts"),
+};
+
 export const calendarService = {
   getEvents: (params) => api.get("/calendar", { params }),
   getFilterOptions: () => api.get("/calendar/options"),
@@ -608,6 +649,8 @@ export const calendarService = {
   updateEvent: (id, data) => api.put(`/calendar/${id}`, data),
   deleteEvent: (id, params) => api.delete(`/calendar/${id}`, { params }),
   publishEvent: (id, data) => api.post(`/calendar/${id}/publish`, data),
+  getContentPlan: (clientId) => api.get(`/calendar/content-plan/${clientId}`),
+  buildMonth: (data) => api.post("/calendar/build", data),
 };
 
 export const credentialsService = {
@@ -640,6 +683,17 @@ export const projectFlowService = {
   getClientProjects: (clientId) =>
     api.get(`/project-flow/clients/${clientId}/projects`),
   createProject: (data) => api.post("/project-flow/projects", data),
+  // Month plans: client -> month -> many service projects
+  getMonthPlans: (clientId) =>
+    api.get(`/project-flow/clients/${clientId}/month-plans`),
+  createMonthPlan: (data) => api.post("/project-flow/month-plans", data),
+  getMonthPlan: (planId) => api.get(`/project-flow/month-plans/${planId}`),
+  updateMonthPlan: (planId, data) =>
+    api.patch(`/project-flow/month-plans/${planId}`, data),
+  addMonthPlanProjects: (planId, projects) =>
+    api.post(`/project-flow/month-plans/${planId}/projects`, { projects }),
+  createMonthPlanInvoice: (planId) =>
+    api.post(`/project-flow/month-plans/${planId}/invoice`),
   getProject: (id) => api.get(`/project-flow/projects/${id}`),
   setProjectStatus: (id, status) =>
     api.patch(`/project-flow/projects/${id}/status`, { status }),
@@ -653,6 +707,11 @@ export const projectFlowService = {
     }),
   completeStep: (id, stepId) =>
     api.post(`/project-flow/projects/${id}/steps/${stepId}/complete`),
+  getReviews: () => api.get("/project-flow/reviews"),
+  addStepTasks: (id, stepId, tasks) =>
+    api.post(`/project-flow/projects/${id}/steps/${stepId}/tasks`, { tasks }),
+  setTaskDone: (id, taskId, done) =>
+    api.patch(`/project-flow/projects/${id}/tasks/${taskId}/done`, { done }),
   approveStep: (id, stepId, kind) =>
     api.post(`/project-flow/projects/${id}/steps/${stepId}/approve`, { kind }),
   requestChanges: (id, stepId, note) =>
@@ -677,12 +736,13 @@ export const expensesService = {
   lookups: () => api.get("/expenses/lookups"),
   categories: () => api.get("/expenses/categories"),
   addCategory: (data) => api.post("/expenses/categories", data),
-  addSubcategory: (id, data) => api.post(`/expenses/categories/${id}/subcategories`, data),
+  addSubcategory: (id, data) =>
+    api.post(`/expenses/categories/${id}/subcategories`, data),
   list: (params) => api.get("/expenses", { params }),
   create: (data) => api.post("/expenses", data),
   update: (id, data) => api.put(`/expenses/${id}`, data),
   markPaid: (id, data) => api.post(`/expenses/${id}/paid`, data),
-  remove: (id) => api.delete(`/expenses/${id}`)
+  remove: (id) => api.delete(`/expenses/${id}`),
 };
 
 export const loansService = {
@@ -694,8 +754,21 @@ export const loansService = {
   remove: (id) => api.delete(`/loans/${id}`),
   close: (id, data) => api.post(`/loans/${id}/close`, data),
   reopen: (id) => api.post(`/loans/${id}/reopen`),
-  pay: (installmentId, data) => api.post(`/loans/installments/${installmentId}/pay`, data),
-  undo: (installmentId) => api.post(`/loans/installments/${installmentId}/undo`)
+  pay: (installmentId, data) =>
+    api.post(`/loans/installments/${installmentId}/pay`, data),
+  undo: (installmentId) =>
+    api.post(`/loans/installments/${installmentId}/undo`),
+};
+
+// Borrowed money: borrowed from a person, returned in any amounts
+export const borrowingsService = {
+  list: (params) => api.get("/borrowings", { params }),
+  get: (id) => api.get(`/borrowings/${id}`),
+  create: (data) => api.post("/borrowings", data),
+  update: (id, data) => api.put(`/borrowings/${id}`, data),
+  remove: (id) => api.delete(`/borrowings/${id}`),
+  addReturn: (id, data) => api.post(`/borrowings/${id}/returns`, data),
+  removeReturn: (returnId) => api.delete(`/borrowings/returns/${returnId}`),
 };
 
 export const adFundsService = {
@@ -708,9 +781,11 @@ export const adFundsService = {
   createCampaign: (data) => api.post("/ad-funds/campaigns", data),
   updateCampaign: (id, data) => api.put(`/ad-funds/campaigns/${id}`, data),
   removeCampaign: (id) => api.delete(`/ad-funds/campaigns/${id}`),
-  statement: (clientId, params) => api.get(`/ad-funds/clients/${clientId}/statement`, { params }),
+  statement: (clientId, params) =>
+    api.get(`/ad-funds/clients/${clientId}/statement`, { params }),
   settings: (clientId) => api.get(`/ad-funds/clients/${clientId}/settings`),
-  saveSettings: (clientId, data) => api.put(`/ad-funds/clients/${clientId}/settings`, data)
+  saveSettings: (clientId, data) =>
+    api.put(`/ad-funds/clients/${clientId}/settings`, data),
 };
 
 export const financeService = {
@@ -719,7 +794,8 @@ export const financeService = {
   updateSettings: (data) => api.put("/finance/settings", data),
   updateSeries: (code, data) => api.put(`/finance/series/${code}`, data),
   getClients: (params) => api.get("/finance/clients", { params }),
-  updateClientBilling: (id, data) => api.put(`/finance/clients/${id}/billing`, data),
+  updateClientBilling: (id, data) =>
+    api.put(`/finance/clients/${id}/billing`, data),
   getClientProjects: (id) => api.get(`/finance/clients/${id}/projects`),
   getServices: () => api.get("/finance/services"),
   updateServiceTax: (id, data) => api.put(`/finance/services/${id}/tax`, data),
@@ -728,14 +804,21 @@ export const financeService = {
   createInvoice: (data) => api.post("/finance/invoices", data),
   updateInvoice: (id, data) => api.put(`/finance/invoices/${id}`, data),
   issueInvoice: (id) => api.post(`/finance/invoices/${id}/issue`),
-  cancelInvoice: (id, reason) => api.post(`/finance/invoices/${id}/cancel`, { reason }),
+  cancelInvoice: (id, reason) =>
+    api.post(`/finance/invoices/${id}/cancel`, { reason }),
   duplicateInvoice: (id) => api.post(`/finance/invoices/${id}/duplicate`),
-  reversePayment: (id, paymentId, reason) => api.post(`/finance/invoices/${id}/payments/${paymentId}/reverse`, { reason }),
+  reversePayment: (id, paymentId, reason) =>
+    api.post(`/finance/invoices/${id}/payments/${paymentId}/reverse`, {
+      reason,
+    }),
   recordPayment: (id, data) => api.post(`/invoices/${id}/payments`, data),
   printUrl: (id) => `${API_BASE_URL}/finance/invoices/${id}/print`,
   report: (name, params) => api.get(`/finance/reports/${name}`, { params }),
   reportXlsx: (name, params) =>
-    api.get(`/finance/reports/${name}`, { params: { ...params, format: "xlsx" }, responseType: "blob" }),
+    api.get(`/finance/reports/${name}`, {
+      params: { ...params, format: "xlsx" },
+      responseType: "blob",
+    }),
   alerts: () => api.get("/finance/alerts"),
   runReminders: () => api.post("/finance/alerts/run"),
   setRetainerBilling: (projectId, data) =>
@@ -753,8 +836,10 @@ export const salesService = {
   createLead: (data) => api.post("/sales/leads", data),
   getLead: (id) => api.get(`/sales/leads/${id}`),
   updateLead: (id, data) => api.put(`/sales/leads/${id}`, data),
-  logInteraction: (id, data) => api.post(`/sales/leads/${id}/interactions`, data),
-  assignLead: (id, ownerUserId) => api.put(`/sales/leads/${id}/owner`, { ownerUserId }),
+  logInteraction: (id, data) =>
+    api.post(`/sales/leads/${id}/interactions`, data),
+  assignLead: (id, ownerUserId) =>
+    api.put(`/sales/leads/${id}/owner`, { ownerUserId }),
   onboardLead: (id, data) => api.post(`/sales/leads/${id}/onboard`, data),
   deleteLead: (id) => api.delete(`/sales/leads/${id}`),
   marketers: (params) => api.get("/sales/marketers", { params }),
@@ -766,11 +851,13 @@ export const salesService = {
   createProposal: (data) => api.post("/sales/proposals", data),
   updateProposal: (id, data) => api.put(`/sales/proposals/${id}`, data),
   sendProposal: (id) => api.post(`/sales/proposals/${id}/send`),
-  convertProposal: (id, data) => api.post(`/sales/proposals/${id}/convert`, data),
+  convertProposal: (id, data) =>
+    api.post(`/sales/proposals/${id}/convert`, data),
   withdrawProposal: (id) => api.post(`/sales/proposals/${id}/withdraw`),
   duplicateProposal: (id) => api.post(`/sales/proposals/${id}/duplicate`),
   deleteProposal: (id) => api.delete(`/sales/proposals/${id}`),
-  cancelQuote: (id, reason) => api.post(`/sales/quotes/${id}/cancel`, { reason }),
+  cancelQuote: (id, reason) =>
+    api.post(`/sales/quotes/${id}/cancel`, { reason }),
   duplicateQuote: (id) => api.post(`/sales/quotes/${id}/duplicate`),
   deleteQuote: (id) => api.delete(`/sales/quotes/${id}`),
   // Quotations
@@ -780,14 +867,21 @@ export const salesService = {
   updateQuote: (id, data) => api.put(`/sales/quotes/${id}`, data),
   sendQuote: (id) => api.post(`/sales/quotes/${id}/send`),
   reviseQuote: (id, data) => api.post(`/sales/quotes/${id}/revise`, data),
-  quoteClientRequest: (id, data) => api.post(`/sales/quotes/${id}/client-request`, data),
+  quoteClientRequest: (id, data) =>
+    api.post(`/sales/quotes/${id}/client-request`, data),
   decideQuote: (id, data) => api.post(`/sales/quotes/${id}/decision`, data),
   convertQuote: (id, data) => api.post(`/sales/quotes/${id}/convert`, data),
-  quoteFromProposal: (proposalId) => api.post(`/sales/proposals/${proposalId}/quote`),
+  quoteFromProposal: (proposalId) =>
+    api.post(`/sales/proposals/${proposalId}/quote`),
   publicQuote: (token) => api.get(`/public/quotes/${token}`),
-  publicQuoteDecision: (token, data) => api.post(`/public/quotes/${token}/decision`, data),
+  // Printable quotation (same layout as the agency invoice); opens in a new tab.
+  quotePrintUrl: (id) => `${API_BASE_URL}/sales/quotes/${id}/print`,
+  publicQuotePrintUrl: (token) => `${API_BASE_URL}/public/quotes/${token}/print`,
+  publicQuoteDecision: (token, data) =>
+    api.post(`/public/quotes/${token}/decision`, data),
   publicProposal: (token) => api.get(`/public/proposals/${token}`),
-  decideProposal: (token, data) => api.post(`/public/proposals/${token}/decision`, data),
+  decideProposal: (token, data) =>
+    api.post(`/public/proposals/${token}/decision`, data),
 };
 
 export default api;

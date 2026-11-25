@@ -13,8 +13,10 @@ import {
   SlidersHorizontal,
   ChevronDown,
   Layers,
-  X
+  X,
+  Wand2
 } from 'lucide-react';
+import { BuildMonthModal } from '../../components/calendar/BuildMonthModal';
 import { useSearchParams } from 'react-router-dom';
 import { calendarService } from '../../services/api';
 import { MonthlyCalendarGrid } from '../../components/calendar/MonthlyCalendarGrid';
@@ -77,6 +79,8 @@ export function CalendarPage() {
   const [selectedDayDate, setSelectedDayDate] = useState(null);
   const [isDayModalOpen, setIsDayModalOpen] = useState(false);
   const [modalInitialDate, setModalInitialDate] = useState(null);
+  const [isBuildOpen, setIsBuildOpen] = useState(false);
+  const [buildNotice, setBuildNotice] = useState('');
 
   // Fetch meta filter options on mount
   useEffect(() => {
@@ -211,14 +215,31 @@ export function CalendarPage() {
         </div>
 
         {canCreate && (
-          <button
-            onClick={() => handleOpenAdd()}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg shadow-sm transition-colors self-start sm:self-auto"
-          >
-            <Plus className="w-4 h-4" /> Add Event
-          </button>
+          <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+            <button
+              onClick={() => setIsBuildOpen(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-lg shadow-sm transition-colors"
+            >
+              <Wand2 className="w-4 h-4" /> Build month calendar
+            </button>
+            <button
+              onClick={() => handleOpenAdd()}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg shadow-sm transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Add Event
+            </button>
+          </div>
         )}
       </div>
+
+      {buildNotice && (
+        <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-2.5 text-sm font-semibold text-emerald-800 flex justify-between gap-3">
+          <span>{buildNotice}</span>
+          <button onClick={() => setBuildNotice('')} className="hover:underline shrink-0">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Main Filter Toolbar */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-4 space-y-3">
@@ -468,6 +489,22 @@ export function CalendarPage() {
         clients={options.clients}
         employees={options.employees}
         departments={options.departments}
+      />
+
+      <BuildMonthModal
+        isOpen={isBuildOpen}
+        onClose={() => setIsBuildOpen(false)}
+        clients={options.clients}
+        employees={options.employees}
+        fixedClientId={selectedClientId || null}
+        initialMonth={`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`}
+        onBuilt={(res, month) => {
+          setIsBuildOpen(false);
+          const [y, m] = month.split('-').map(Number);
+          setCurrentDate(new Date(y, m - 1, 1));
+          setBuildNotice(`Added ${res?.created || 0} items to the content calendar for ${new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}.`);
+          fetchEvents();
+        }}
       />
 
       <DayActivitiesModal

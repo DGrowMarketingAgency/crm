@@ -44,7 +44,7 @@ export class BillingAlertsService {
         `SELECT p.id, p.name, p.billing_amount, p.retainer_auto_invoice, p.retainer_invoice_type, p.team_leader_id, tl.name AS team_leader,
                 c.id AS client_id, COALESCE(c.company_name, c.name) AS client_name, c.account_manager_id
          FROM projects p JOIN clients c ON c.id = p.client_id LEFT JOIN users tl ON tl.id = p.team_leader_id
-         WHERE p.project_category = 'regular' AND p.parent_project_id IS NULL AND p.is_archived = 0 AND p.status = 'active'
+         WHERE p.project_category = 'regular' AND p.parent_project_id IS NULL AND p.month_plan_id IS NULL AND p.is_archived = 0 AND p.status = 'active'
            AND NOT EXISTS (SELECT 1 FROM projects x WHERE x.parent_project_id = p.id AND x.cycle_month = ?)
          ORDER BY c.company_name, p.name`,
         [nm.key]

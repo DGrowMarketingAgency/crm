@@ -8,9 +8,11 @@ import {
   RotateCcw,
   SlidersHorizontal,
   ChevronDown,
-  X
+  X,
+  Wand2
 } from 'lucide-react';
 import { calendarService } from '../../services/api';
+import { BuildMonthModal } from './BuildMonthModal';
 import { MonthlyCalendarGrid } from './MonthlyCalendarGrid';
 import { EventDetailModal } from './EventDetailModal';
 import { AddEditEventModal } from './AddEditEventModal';
@@ -55,6 +57,7 @@ export function ClientCalendarTab({ clientId, clientName }) {
   const [selectedDayDate, setSelectedDayDate] = useState(null);
   const [isDayModalOpen, setIsDayModalOpen] = useState(false);
   const [modalInitialDate, setModalInitialDate] = useState(null);
+  const [isBuildOpen, setIsBuildOpen] = useState(false);
 
   // Load options
   useEffect(() => {
@@ -169,12 +172,20 @@ export function ClientCalendarTab({ clientId, clientName }) {
             </button>
 
             {canCreate && (
-              <button
-                onClick={() => handleOpenAdd()}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg shadow-sm transition-colors"
-              >
-                <Plus className="w-4 h-4" /> Add Event
-              </button>
+              <>
+                <button
+                  onClick={() => setIsBuildOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-lg shadow-sm transition-colors"
+                >
+                  <Wand2 className="w-4 h-4" /> Build month
+                </button>
+                <button
+                  onClick={() => handleOpenAdd()}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg shadow-sm transition-colors"
+                >
+                  <Plus className="w-4 h-4" /> Add Event
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -308,6 +319,21 @@ export function ClientCalendarTab({ clientId, clientName }) {
         clients={[{ id: clientId, name: clientName }]}
         employees={options.employees}
         departments={options.departments}
+      />
+
+      <BuildMonthModal
+        isOpen={isBuildOpen}
+        onClose={() => setIsBuildOpen(false)}
+        clients={[{ id: clientId, name: clientName }]}
+        employees={options.employees}
+        fixedClientId={clientId}
+        initialMonth={`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`}
+        onBuilt={(res, month) => {
+          setIsBuildOpen(false);
+          const [y, m] = month.split('-').map(Number);
+          setCurrentDate(new Date(y, m - 1, 1));
+          fetchEvents();
+        }}
       />
 
       <DayActivitiesModal

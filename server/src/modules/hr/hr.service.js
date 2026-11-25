@@ -1343,7 +1343,7 @@ export class HRService {
     const [empCount] = await pool.query(
       `SELECT COUNT(*) AS total FROM users u
        WHERE u.status = 'active' AND u.role <> 'client' AND u.client_id IS NULL
-         AND NOT EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id AND r.slug = 'client')`
+         AND NOT EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id AND r.slug IN ('client', 'freelance-videographer'))`
     );
 
     const [attStats] = await pool.query(

@@ -38,6 +38,9 @@ export const STATUS_BADGE = {
   todo: 'bg-slate-100 text-slate-600',
   in_progress: 'bg-blue-50 text-blue-700',
   in_review: 'bg-purple-50 text-purple-700',
+  client_review: 'bg-purple-50 text-purple-700',
+  revision: 'bg-orange-50 text-orange-700',
+  done: 'bg-emerald-50 text-emerald-700',
   blocked: 'bg-red-50 text-red-700',
   pending: 'bg-slate-100 text-slate-500'
 };
@@ -53,7 +56,26 @@ export const fmtDate = (d) => {
   return new Date(y, m - 1, day).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
-export const humanize = (s) => (s ? String(s).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '');
+/** "2026-12" → "Dec 2026" */
+export const monthLabel = (ym) => {
+  if (!ym) return '';
+  const [y, m] = String(ym).split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+};
+
+/** YYYY-MM for today plus `offset` months. */
+export const monthKey = (offset = 0, from = new Date()) => {
+  const d = new Date(from.getFullYear(), from.getMonth() + offset, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
+export const PLAN_STATUS_BADGE = {
+  draft: 'bg-slate-100 text-slate-600',
+  active: 'bg-emerald-50 text-emerald-700',
+  closed: 'bg-slate-800 text-white'
+};
+
+export const humanize =(s) => (s ? String(s).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '');
 
 export function CategoryBadge({ category }) {
   const meta = CATEGORIES[category];

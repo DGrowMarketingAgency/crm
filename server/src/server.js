@@ -16,10 +16,20 @@ import { runMigration027 } from './scripts/run-migration-027.js';
 import { runMigration028 } from './scripts/run-migration-028.js';
 import { runMigration029 } from './scripts/run-migration-029.js';
 import { runMigration030 } from './scripts/run-migration-030.js';
+import { runMigration031 } from './scripts/run-migration-031.js';
+import { runMigration032 } from './scripts/run-migration-032.js';
+import { runMigration033 } from './scripts/run-migration-033.js';
+import { runMigration034 } from './scripts/run-migration-034.js';
+import { runMigration035 } from './scripts/run-migration-035.js';
+import { runMigration036 } from './scripts/run-migration-036.js';
+import { runMigration037 } from './scripts/run-migration-037.js';
+import { runMigration038 } from './scripts/run-migration-038.js';
+import { runMigration039 } from './scripts/run-migration-039.js';
 import { ProjectFlowService } from './modules/project-flow/projectFlow.service.js';
 import { BillingAlertsService } from './modules/finance/billingAlerts.service.js';
 import { SalesRemindersService } from './modules/sales/salesReminders.service.js';
 import { ExpenseRemindersService } from './modules/expenses/expenseReminders.service.js';
+import { ShootRemindersService } from './modules/shoots/shootReminders.service.js';
 
 async function startServer() {
   console.log('🔄 Checking database connectivity...');
@@ -49,8 +59,17 @@ async function startServer() {
     await runMigration028();
     await runMigration029();
     await runMigration030();
+    await runMigration031();
+    await runMigration032();
+    await runMigration033();
+    await runMigration034();
+    await runMigration035();
+    await runMigration036();
+    await runMigration037();
+    await runMigration038();
+    await runMigration039();
   } catch (err) {
-    console.error('⚠️ Startup migration (021-030) failed:', err.message);
+    console.error('⚠️ Startup migration (021-039) failed:', err.message);
   }
 
   // Create HTTP server and initialize Socket.IO
@@ -70,8 +89,12 @@ async function startServer() {
 
   // Regular (retainer) projects: create this month's cycle on boot and re-check every 6 hours
   // Billing reminders (overdue / due / retainer renewals) run right after, so new cycles' invoices are counted.
+  // Month plans are drafted first (from the 20th, next month is copied from this one) so retainer cycles join them.
   const runCycles = () =>
-    ProjectFlowService.runMonthlyCycles()
+    ProjectFlowService.runMonthPlanDrafts()
+      .then((r) => r.created && console.log(`🗓️  Drafted ${r.created} month plan(s): ${r.months.join(', ')}`))
+      .catch((err) => console.error('Month plan draft worker error:', err))
+      .then(() => ProjectFlowService.runMonthlyCycles())
       .then((r) => r.created && console.log(`🔁 Created ${r.created} monthly project cycle(s) for ${r.month}`))
       .catch((err) => console.error('Monthly cycle worker error:', err))
       .then(() => BillingAlertsService.runReminders())
@@ -88,7 +111,10 @@ async function startServer() {
       .catch((err) => console.error('Sales reminder worker error:', err))
       .then(() => ExpenseRemindersService.run())
       .then((r) => r?.sent && console.log(`💳 Sent ${r.sent} EMI / ad-fund alert(s)`))
-      .catch((err) => console.error('EMI reminder worker error:', err));
+      .catch((err) => console.error('EMI reminder worker error:', err))
+      .then(() => ShootRemindersService.run())
+      .then((r) => r?.sent && console.log(`🎬 Sent ${r.sent} shoot reminder(s)`))
+      .catch((err) => console.error('Shoot reminder worker error:', err));
   runSalesReminders();
   const salesRemindersInterval = setInterval(runSalesReminders, 5 * 60 * 1000);
 

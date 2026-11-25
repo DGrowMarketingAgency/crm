@@ -4,6 +4,11 @@ import { NotificationsService } from '../notifications/notifications.service.js'
 import { WorkflowEngineService } from '../automation/workflow-engine.service.js';
 import bcrypt from 'bcrypt';
 
+/** Services a client is getting this month = distinct services across its current month plan's live projects. */
+const ACTIVE_SERVICES_SQL = `(SELECT COUNT(DISTINCT bsp.service_id) FROM projects bsp
+   JOIN client_month_plans bmp ON bmp.id = bsp.month_plan_id
+   WHERE bmp.client_id = c.id AND bmp.plan_month = DATE_FORMAT(CURDATE(), '%Y-%m')
+     AND bsp.is_archived = 0 AND bsp.status <> 'cancelled' AND bsp.service_id IS NOT NULL)`;
 
 export const LIFECYCLE_STAGES = [
   { stage: 'lead', label: 'Lead / Opportunity', owner: 'BD Executive', exitCriteria: 'Lead qualified with budget and scope alignment.' },
@@ -219,7 +224,7 @@ export class ClientsService {
               (SELECT cc.email FROM client_contacts cc WHERE cc.client_id = c.id AND cc.is_primary = TRUE LIMIT 1) as primary_contact_email,
               (SELECT cc.phone FROM client_contacts cc WHERE cc.client_id = c.id AND cc.is_primary = TRUE LIMIT 1) as primary_contact_phone,
               (SELECT cc.designation FROM client_contacts cc WHERE cc.client_id = c.id AND cc.is_primary = TRUE LIMIT 1) as primary_contact_designation,
-              COUNT(DISTINCT si.id) as bundled_services_count,
+              ${ACTIVE_SERVICES_SQL} as bundled_services_count,
               COUNT(DISTINCT p.id) as project_count,
               (
                 SELECT COUNT(*) FROM client_onboarding_items coi 
@@ -393,7 +398,7 @@ export class ClientsService {
               u.name as portal_user_name, u.email as portal_user_email,
               am.name as account_manager_name, am.email as account_manager_email,
               ob.name as onboarding_owner_name, ob.email as onboarding_owner_email,
-              COUNT(DISTINCT si.id) as bundled_services_count,
+              ${ACTIVE_SERVICES_SQL} as bundled_services_count,
               COUNT(DISTINCT p.id) as project_count
        FROM clients c
        LEFT JOIN users u ON c.user_id = u.id

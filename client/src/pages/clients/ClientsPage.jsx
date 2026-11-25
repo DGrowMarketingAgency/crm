@@ -253,13 +253,21 @@ export function ClientsPage() {
       const res = await clientsService.bundleServices(bundlingClient.id, {
         serviceTypes: selectedServices
       });
-      setNotice(`Successfully bundled ${selectedServices.length} service(s) onto ${bundlingClient.name}!`);
-      setTimeout(() => setNotice(''), 4500);
+      // Bundled services land as projects in the client's month plan for this month, with their step tasks.
+      const d = res.data?.data || res.data || {};
+      const added = d.bundled_services?.length ?? selectedServices.length;
+      const skipped = d.skipped_service_ids?.length || 0;
+      setNotice(
+        `Added ${added} service project${added === 1 ? '' : 's'} to ${bundlingClient.name}'s ${d.plan_month || 'current'} month plan` +
+          `${d.generated_tasks?.length ? ` with ${d.generated_tasks.length} tasks` : ''}` +
+          `${skipped ? ` (${skipped} already in this month)` : ''}.`
+      );
+      setTimeout(() => setNotice(''), 6000);
       setBundleModalOpen(false);
       fetchClients();
       fetchDashboardStats();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to bundle services onto client.');
+      setError(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to bundle services onto client.');
       setTimeout(() => setError(''), 4500);
     } finally {
       setIsBundling(false);

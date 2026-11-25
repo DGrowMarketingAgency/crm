@@ -36,7 +36,7 @@ export class UsersService {
     // Pickers for assigning work must never offer client-portal accounts.
     if (staffOnly) {
       whereClauses.push(`u.role <> 'client' AND u.client_id IS NULL
-        AND NOT EXISTS (SELECT 1 FROM user_roles cur JOIN roles cr ON cr.id = cur.role_id WHERE cur.user_id = u.id AND cr.slug = 'client')`);
+        AND NOT EXISTS (SELECT 1 FROM user_roles cur JOIN roles cr ON cr.id = cur.role_id WHERE cur.user_id = u.id AND cr.slug IN ('client', 'freelance-videographer'))`);
     }
 
     if (search.trim()) {

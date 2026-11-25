@@ -189,7 +189,7 @@ export class FinanceService {
     const [rows] = await pool.query(
       `SELECT id, name, project_code, project_category, cycle_month, billing_amount, status
        FROM projects WHERE client_id = ? AND is_archived = 0
-         AND NOT (project_category = 'regular' AND parent_project_id IS NULL)
+         AND NOT (project_category = 'regular' AND parent_project_id IS NULL AND month_plan_id IS NULL)
        ORDER BY created_at DESC LIMIT 100`,
       [clientId]
     );

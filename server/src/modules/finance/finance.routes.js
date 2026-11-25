@@ -5,6 +5,8 @@ import { validate } from '../../middleware/validate.js';
 import { csrfProtection } from '../../utils/csrf.js';
 import { FinanceService as F } from './finance.service.js';
 import { renderTaxInvoice } from './invoiceTemplate.js';
+import { sendPrintable } from './documentTemplate.js';
+import { env } from '../../config/env.js';
 import { FinanceReportsService } from './reports.service.js';
 import { BillingAlertsService } from './billingAlerts.service.js';
 import { isClientPortalUser } from '../project-flow/projectFlow.service.js';
@@ -73,7 +75,7 @@ router.post('/finance/invoices/:id/payments/:paymentId/reverse', requirePermissi
 router.get('/finance/invoices/:id/print', requirePermission('invoices.view'), async (req, res, next) => {
   try {
     const [doc, settings] = await Promise.all([F.getInvoice(id(req)), F.getSettings()]);
-    res.set('Content-Type', 'text/html; charset=utf-8').send(renderTaxInvoice(doc, settings));
+    sendPrintable(res, renderTaxInvoice(doc, settings, env.CLIENT_URL), env.CLIENT_URL);
   } catch (e) {
     next(e);
   }

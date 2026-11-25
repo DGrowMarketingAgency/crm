@@ -281,6 +281,14 @@ export class DeliverablesService {
 
       await connection.commit();
 
+      // Handing work in stops the submitter's running clock on it.
+      try {
+        const { ProjectFlowService } = await import('../project-flow/projectFlow.service.js');
+        await ProjectFlowService.onTaskSubmitted(taskId, actorUser, req);
+      } catch (timerErr) {
+        console.error('Could not stop the timer on submit:', timerErr);
+      }
+
       return await this.getSubmissionById(submissionId);
     } catch (err) {
       await connection.rollback();
@@ -325,9 +333,23 @@ export class DeliverablesService {
       throw error;
     }
 
-    // Access check: reviewer must have project/client access
+    // Nobody approves their own work.
+    const isOwnerActor = actorUser.is_owner || actorUser.isOwner || actorUser.roles?.some((r) => r.slug === 'owner');
+    if (Number(submission.submitted_by) === Number(actorUser.id) && !isOwnerActor) {
+      const error = new Error('You can’t review your own work — someone else on the team has to');
+      error.status = 403;
+      error.code = 'SELF_REVIEW';
+      throw error;
+    }
+
+    // Access check: reviewer must have project/client access. Whoever manages the project in the project flow
+    // (admin / PM, its team leader, or the client's account manager) may review its deliverables too.
     if (submission.project_id) {
-      const canAccess = await ProjectsPolicy.canAccessProject(submission.project_id, actorUser);
+      let canAccess = await ProjectsPolicy.canAccessProject(submission.project_id, actorUser);
+      if (!canAccess) {
+        const { ProjectFlowService } = await import('../project-flow/projectFlow.service.js');
+        canAccess = await ProjectFlowService.canManageProject(submission.project_id, actorUser);
+      }
       if (!canAccess) {
         const error = new Error('Access denied to this project and deliverable');
         error.status = 403;
@@ -583,6 +605,18 @@ export class DeliverablesService {
         }
       }
 
+      // Project flow: sent to the client → lifecycle L4; completed without client → stage may finish.
+      if (decision === 'approved') {
+        try {
+          const { ProjectFlowService } = await import('../project-flow/projectFlow.service.js');
+          const needsClient = Boolean(submission.requires_client_approval || submission.task_requires_client_approval || submission.is_client_deliverable);
+          if (needsClient) await ProjectFlowService.onClientReviewChange(submission.client_id, 'sent');
+          else await ProjectFlowService.afterTaskChange(submission.task_id, actorUser.id);
+        } catch (flowErr) {
+          console.error('Project flow hook error on internal approval:', flowErr);
+        }
+      }
+
       return await this.getSubmissionById(submissionId);
     } catch (err) {
       await connection.rollback();
@@ -690,6 +724,15 @@ export class DeliverablesService {
         await WorkflowEngineService.onTaskCompleted(submission.task_id, actorUser, req);
       } catch (autoErr) {
         console.error('Trigger D evaluation error on client approval:', autoErr);
+      }
+
+      // Project flow: the approved deliverable may finish its stage; lifecycle returns to L3 once nothing awaits the client.
+      try {
+        const { ProjectFlowService } = await import('../project-flow/projectFlow.service.js');
+        await ProjectFlowService.afterTaskChange(submission.task_id, actorUser.id);
+        await ProjectFlowService.onClientReviewChange(submission.client_id, 'done');
+      } catch (flowErr) {
+        console.error('Project flow hook error on client approval:', flowErr);
       }
 
       return await this.getSubmissionById(submissionId);
@@ -836,6 +879,14 @@ export class DeliverablesService {
       });
 
       await connection.commit();
+
+      // Revision requested: the work goes back to execution, so the client returns to L3 if nothing else awaits them.
+      try {
+        const { ProjectFlowService } = await import('../project-flow/projectFlow.service.js');
+        await ProjectFlowService.onClientReviewChange(submission.client_id, 'done');
+      } catch (flowErr) {
+        console.error('Project flow hook error on revision request:', flowErr);
+      }
 
       return await this.getSubmissionById(submissionId);
     } catch (err) {

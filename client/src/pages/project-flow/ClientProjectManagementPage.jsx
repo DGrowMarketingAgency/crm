@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Plus, FolderKanban, Repeat, Users, User, CalendarClock } from 'lucide-react';
+import { Plus, FolderKanban, Repeat, Users, User, CalendarClock, CalendarPlus, CalendarDays } from 'lucide-react';
 import { projectFlowService } from '../../services/api';
 import { usePermission } from '../../hooks/usePermission';
 import {
@@ -13,9 +13,34 @@ import {
   Empty,
   errorMessage,
   fmtDate,
-  btnPrimary
+  btnPrimary,
+  btnSecondary,
+  humanize,
+  monthKey,
+  PLAN_STATUS_BADGE
 } from './flowUi';
 import { CreateFlowProjectModal } from './CreateFlowProjectModal';
+import { CreateMonthPlanModal } from './CreateMonthPlanModal';
+
+function MonthPlanCard({ plan, current, onOpen }) {
+  return (
+    <button
+      onClick={() => onOpen(plan.id)}
+      className={`shrink-0 w-56 text-left rounded-2xl border bg-white shadow-sm p-4 transition-all hover:border-red-200 ${current ? 'border-red-300 ring-2 ring-red-100' : 'border-slate-100'}`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-black text-slate-900">{plan.label}</span>
+        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${PLAN_STATUS_BADGE[plan.status]}`}>{humanize(plan.status)}</span>
+      </div>
+      <p className="text-xs text-slate-500 mt-1">
+        {plan.project_count} project{plan.project_count === 1 ? '' : 's'}
+        {plan.completed_count ? ` · ${plan.completed_count} done` : ''}
+        {current ? ' · This month' : ''}
+      </p>
+      <Progress done={plan.step_done} total={plan.step_total} className="mt-3" />
+    </button>
+  );
+}
 
 const TABS = [['all', 'All'], ...Object.entries(CATEGORIES).map(([k, v]) => [k, v.label])];
 
@@ -102,6 +127,7 @@ export function ClientProjectManagementPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
+  const [planning, setPlanning] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -124,6 +150,8 @@ export function ClientProjectManagementPage() {
   const counts = Object.fromEntries(TABS.map(([k]) => [k, k === 'all' ? projects.length : projects.filter((p) => p.project_category === k).length]));
   const visible = tab === 'all' ? projects : projects.filter((p) => p.project_category === tab);
   const clientName = data?.client ? data.client.company_name || data.client.name : '…';
+  const monthPlans = data?.month_plans || [];
+  const thisMonth = monthKey(0);
 
   return (
     <div className="space-y-6">
@@ -137,12 +165,47 @@ export function ClientProjectManagementPage() {
           </p>
         </div>
         {canCreate && data?.client && (
-          <button className={btnPrimary} onClick={() => setCreating(true)}>
-            <Plus className="w-4 h-4" /> New project
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button className={btnSecondary} onClick={() => setCreating(true)}>
+              <Plus className="w-4 h-4" /> One-off project
+            </button>
+            <button className={btnPrimary} onClick={() => setPlanning(true)}>
+              <CalendarPlus className="w-4 h-4" /> Plan a month
+            </button>
+          </div>
         )}
       </div>
 
+      {/* Month plans: what we deliver for this client each month, one project per service. */}
+      {data && (
+        <section className="space-y-2">
+          <h2 className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+            <CalendarDays className="w-3.5 h-3.5" /> Monthly plans
+          </h2>
+          {monthPlans.length === 0 ? (
+            <div className="bg-white border border-dashed border-slate-200 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <p className="text-sm text-slate-600">
+                No months planned yet. Pick a month, then add a project for every service you deliver that month.
+              </p>
+              {canCreate && (
+                <button className={`${btnPrimary} shrink-0`} onClick={() => setPlanning(true)}>
+                  <CalendarPlus className="w-4 h-4" /> Plan a month
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex gap-3 overflow-x-auto pb-1">
+              {monthPlans.map((p) => (
+                <MonthPlanCard key={p.id} plan={p} current={p.plan_month === thisMonth} onOpen={(id) => navigate(`/month-plans/${id}`)} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      <h2 className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5 pt-2">
+        <FolderKanban className="w-3.5 h-3.5" /> Retainers & one-off projects
+      </h2>
       <div className="flex gap-1 overflow-x-auto bg-white p-1 rounded-2xl border border-slate-100 shadow-sm">
         {TABS.map(([key, label]) => (
           <button
@@ -159,9 +222,21 @@ export function ClientProjectManagementPage() {
         {visible.length === 0 ? (
           <Empty
             icon={FolderKanban}
-            title={tab === 'all' ? 'No projects for this client yet' : `No ${CATEGORIES[tab]?.label} projects`}
-            text={tab !== 'all' ? CATEGORIES[tab]?.hint : 'Create a regular, one-time, urgent or out-of-service project.'}
-            action={canCreate && <button className={btnPrimary} onClick={() => setCreating(true)}><Plus className="w-4 h-4" /> New project</button>}
+            title={
+              tab !== 'all'
+                ? `No ${CATEGORIES[tab]?.label} projects`
+                : monthPlans.length
+                  ? 'No retainers or one-off projects'
+                  : 'No projects for this client yet'
+            }
+            text={
+              tab !== 'all'
+                ? CATEGORIES[tab]?.hint
+                : monthPlans.length
+                  ? 'Monthly work lives in the month plans above. Use this for a one-off website, an urgent extra, or an old-style retainer.'
+                  : 'Create a regular, one-time, urgent or out-of-service project.'
+            }
+            action={canCreate && <button className={btnSecondary} onClick={() => setCreating(true)}><Plus className="w-4 h-4" /> One-off project</button>}
           />
         ) : (
           <div className="grid lg:grid-cols-2 gap-4">
@@ -171,6 +246,23 @@ export function ClientProjectManagementPage() {
           </div>
         )}
       </PageState>
+
+      {planning && data?.client && (
+        <CreateMonthPlanModal
+          client={data.client}
+          plans={monthPlans}
+          onClose={() => setPlanning(false)}
+          onCreated={(res) => {
+            setPlanning(false);
+            const skipped = res.skipped || [];
+            navigate(`/month-plans/${res.plan.id}`, {
+              state: res.copied
+                ? { notice: `Copied ${res.copied} project${res.copied === 1 ? '' : 's'}.${skipped.length ? ` Skipped: ${skipped.map((s) => `${s.name} (${s.reason})`).join('; ')}.` : ''}` }
+                : undefined
+            });
+          }}
+        />
+      )}
 
       {creating && data?.client && (
         <CreateFlowProjectModal

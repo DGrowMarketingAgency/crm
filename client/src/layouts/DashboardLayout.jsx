@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { projectFlowService } from '../services/api';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { usePermission } from '../hooks/usePermission';
@@ -6,6 +7,7 @@ import { NotificationBell } from '../components/notifications/NotificationBell';
 import { NotificationPreferencesModal } from '../pages/notifications/NotificationPreferencesModal';
 import { ActiveTimerHeaderWidget } from '../components/time/ActiveTimerHeaderWidget';
 import BranchedMenu from '../components/navigation/BranchedMenu';
+import { isFreelanceOnly } from '../pages/shoots/shootUi';
 import {
   Layers,
   LogOut,
@@ -31,9 +33,15 @@ import {
   Building2,
   GitBranch,
   ListChecks,
+  ClipboardCheck,
   Wallet,
   Landmark,
-  Megaphone
+  HandCoins,
+  Megaphone,
+  Camera,
+  CalendarClock,
+  Clapperboard,
+  CalendarCheck2
 } from 'lucide-react';
 import {
   DashboardSquare01Icon,
@@ -67,6 +75,28 @@ export function DashboardLayout() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+
+  // Reviews & Approvals badge: decisions waiting on me + my own work sent back. Refreshes every minute,
+  // when the page changes something, and on navigation.
+  const canSeeReviews = !isClientUser && hasPermission('tasks.view');
+  const [reviewCount, setReviewCount] = useState(0);
+  useEffect(() => {
+    if (!canSeeReviews) return undefined;
+    let alive = true;
+    const refresh = () =>
+      projectFlowService
+        .getReviews()
+        .then((r) => alive && setReviewCount(Number(r.data?.counts?.action || 0)))
+        .catch(() => {});
+    refresh();
+    const timer = setInterval(refresh, 60000);
+    window.addEventListener('reviews:changed', refresh);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+      window.removeEventListener('reviews:changed', refresh);
+    };
+  }, [canSeeReviews, location.pathname]);
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -104,16 +134,24 @@ export function DashboardLayout() {
     if (path.startsWith('/finance/settings')) return '/finance/settings';
     if (path.startsWith('/finance/expenses')) return '/finance/expenses';
     if (path.startsWith('/finance/loans')) return '/finance/loans';
+    if (path.startsWith('/finance/borrowed')) return '/finance/borrowed';
     if (path.startsWith('/finance/ad-funds')) return '/finance/ad-funds';
     if (path.startsWith('/project-pipelines')) return '/project-pipelines';
     if (path.startsWith('/employee-tasks')) return '/employee-tasks';
+    if (path.startsWith('/reviews')) return '/reviews';
     if (path.startsWith('/services')) return '/services';
     if (path.startsWith('/workflows/activity')) return '/workflows/activity';
     if (path.startsWith('/workflows')) return '/workflows';
     if (path.startsWith('/tasks')) return '/employee-tasks';
     if (path.startsWith('/projects')) return '/projects';
     if (path.startsWith('/clients')) return '/clients';
+    if (path.startsWith('/shoot-dates')) return '/shoot-dates';
     if (path.startsWith('/calendar')) return '/calendar';
+    if (path.startsWith('/shoots/availability')) return '/shoots/availability';
+    if (path.startsWith('/shoots/mine')) return isFreelanceOnly(roles) ? '/shoots/mine' : '/shoots/open';
+    if (path.startsWith('/shoots/open')) return '/shoots/open';
+    if (path.startsWith('/shoots/payments')) return isFreelanceOnly(roles) ? '/shoots/payments' : '/shoots/open';
+    if (path.startsWith('/shoots')) return '/shoots';
     if (path.startsWith('/leads')) return '/leads';
     if (path.startsWith('/tickets')) return '/tickets';
     if (path.startsWith('/billing')) return '/billing';
@@ -133,7 +171,7 @@ export function DashboardLayout() {
     return '/dashboard';
   };
 
-  const menuItems = [
+  const staffMenu = [
     {
       label: isClientUser ? 'Client Portal' : 'Service & Workflow Management',
       children: [
@@ -172,6 +210,23 @@ export function DashboardLayout() {
           value: '/employee-tasks',
           label: 'Employee Task Desk',
           icon: ListChecks
+        },
+        canSeeReviews && {
+          value: '/reviews',
+          label: 'Review & Approve',
+          icon: ClipboardCheck,
+          badge: reviewCount
+        },
+        // In-house videographers mark when they're free for shoots (owners/admins plan instead).
+        !isClientUser && !isAdminUser && hasPermission('shoots.availability') && {
+          value: '/shoots/availability',
+          label: 'My Shoot Availability',
+          icon: CalendarClock
+        },
+        !isClientUser && !isAdminUser && hasPermission('shoots.availability') && {
+          value: '/shoots/open',
+          label: 'Shoots',
+          icon: Clapperboard
         }
       ].filter(Boolean)
     },
@@ -187,6 +242,16 @@ export function DashboardLayout() {
           value: '/calendar',
           label: isClientUser ? 'Campaign Calendar' : 'Content & Work Calendar',
           icon: Calendar
+        },
+        isClientUser && hasPermission('shoots.respond') && {
+          value: '/shoot-dates',
+          label: 'Shoot Dates',
+          icon: CalendarCheck2
+        },
+        !isClientUser && (hasPermission('shoots.view') || hasPermission('shoots.manage')) && {
+          value: '/shoots',
+          label: 'Shoot Planner',
+          icon: Camera
         },
         // Old "BD Pipelines" (/leads) and staff "Quotations & Invoices" (/billing) are replaced by
         // Sales (enquiries, proposals, quotations) and Finance (GST invoices). Clients keep their invoices page.
@@ -236,6 +301,7 @@ export function DashboardLayout() {
       children: [
         hasPermission('expenses.view') && { value: '/finance/expenses', label: 'Expenses & Purchases', icon: Wallet },
         hasPermission('expenses.view') && { value: '/finance/loans', label: 'EMI & Loans', icon: Landmark },
+        hasPermission('expenses.view') && { value: '/finance/borrowed', label: 'Borrowed Money', icon: HandCoins },
         hasPermission('adfunds.view') && { value: '/finance/ad-funds', label: 'Client Ad Funds', icon: Megaphone }
       ].filter(Boolean)
     },
@@ -307,6 +373,22 @@ export function DashboardLayout() {
   ]
     .filter(Boolean)
     .filter((cat) => cat.children && cat.children.length > 0);
+
+  // Freelance videographers get a login with only their shoot calendar (no workspace, clients or tasks).
+  const menuItems = isFreelanceOnly(roles)
+    ? [
+        {
+          label: "My Shoots",
+          children: [
+            { value: "/shoots/availability", label: "My Availability", icon: CalendarClock },
+            { value: "/shoots/open", label: "Open Shoots", icon: Clapperboard },
+            { value: "/shoots/mine", label: "My Shoots", icon: Camera },
+            { value: "/shoots/payments", label: "My Payments", icon: Wallet },
+            hasPermission("notifications.view") && { value: "/notifications", label: "Notifications", icon: Notification01Icon }
+          ].filter(Boolean)
+        }
+      ]
+    : staffMenu;
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-slate-50 flex">
@@ -409,7 +491,7 @@ export function DashboardLayout() {
             </div>
 
             {/* Active Task Timer Widget */}
-            <ActiveTimerHeaderWidget />
+            {hasPermission('timers.view_own') && <ActiveTimerHeaderWidget />}
 
             {/* Notification Bell */}
             <NotificationBell onOpenPreferences={() => setPreferencesOpen(true)} />

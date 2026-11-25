@@ -1358,6 +1358,36 @@ export const PERMISSION_REGISTRY = [
     action: 'publish',
     label: 'Record Publication',
     description: 'Allows confirming live publication with URL and notes'
+  },
+
+  // Video shoots: videographer availability (in-house + freelance)
+  {
+    key: 'shoots.availability',
+    module: 'Shoots',
+    action: 'availability',
+    label: 'Mark Own Shoot Availability',
+    description: 'Allows a videographer to mark the dates and times they are free for shoots'
+  },
+  {
+    key: 'shoots.view',
+    module: 'Shoots',
+    action: 'view',
+    label: 'View Videographer Availability',
+    description: 'Allows seeing which videographers are free on each date before fixing a shoot day'
+  },
+  {
+    key: 'shoots.manage',
+    module: 'Shoots',
+    action: 'manage',
+    label: 'Manage Videographers',
+    description: 'Allows adding in-house and freelance videographers, setting rates and editing their availability'
+  },
+  {
+    key: 'shoots.respond',
+    module: 'Shoots',
+    action: 'respond',
+    label: 'Pick Shoot Dates (client portal)',
+    description: 'Allows a client to pick one of the shoot dates the team proposed, or say none work'
   }
 ];
 
@@ -1410,6 +1440,7 @@ export const DEFAULT_SYSTEM_ROLES = [
       'roles.view', 'roles.create', 'roles.update', 'roles.delete', 'roles.assign_permissions', 'roles.assign_users',
       'permissions.view',
       'calendar.view', 'calendar.create', 'calendar.update', 'calendar.delete', 'calendar.publish',
+      'shoots.view', 'shoots.manage',
       'settings.view', 'settings.update'
     ]
   },
@@ -1447,6 +1478,7 @@ export const DEFAULT_SYSTEM_ROLES = [
       'roles.view',
       'permissions.view',
       'calendar.view', 'calendar.create', 'calendar.update', 'calendar.delete', 'calendar.publish',
+      'shoots.view', 'shoots.manage',
       'settings.view'
     ]
   },
@@ -1535,7 +1567,8 @@ export const DEFAULT_SYSTEM_ROLES = [
       'services.view',
       'lifecycle.view',
       'permissions.view',
-      'calendar.view'
+      'calendar.view',
+      'shoots.respond'
     ]
   },
   {
@@ -1571,7 +1604,8 @@ export const DEFAULT_SYSTEM_ROLES = [
       'notifications.view', 'notifications.manage_own', 'notifications.manage_preferences',
       'reports.view_dashboard', 'reports.view_projects', 'reports.view_tasks', 'reports.view_clients',
       'permissions.view',
-      'calendar.view', 'calendar.create', 'calendar.update', 'calendar.delete', 'calendar.publish'
+      'calendar.view', 'calendar.create', 'calendar.update', 'calendar.delete', 'calendar.publish',
+      'shoots.view'
     ]
   },
   {
@@ -1679,6 +1713,7 @@ export const DEFAULT_SYSTEM_ROLES = [
     description: 'Video producer and editor creating reels, shorts, shoots, and long-form videos.',
     is_system: true,
     permissionKeys: [
+      'shoots.availability',
       'tasks.view', 'tasks.change_status',
       'subtasks.view', 'subtasks.create', 'subtasks.update',
       'task_comments.view', 'task_comments.create', 'task_comments.update_own',
@@ -1689,6 +1724,17 @@ export const DEFAULT_SYSTEM_ROLES = [
       'timers.start', 'timers.stop_own', 'timers.view_own',
       'timesheets.view_own', 'timesheets.submit',
       'chat.view', 'chat.create_direct', 'chat.create_group', 'chat.send',
+      'notifications.view', 'notifications.manage_own', 'notifications.manage_preferences',
+      'permissions.view'
+    ]
+  },
+  {
+    name: 'Freelance Videographer',
+    slug: 'freelance-videographer',
+    description: 'Outside videographer with a limited login: marks monthly shoot availability and (later) accepts shoot slots. No access to clients, tasks or finance.',
+    is_system: true,
+    permissionKeys: [
+      'shoots.availability',
       'notifications.view', 'notifications.manage_own', 'notifications.manage_preferences',
       'permissions.view'
     ]

@@ -39,6 +39,8 @@ import { PasswordManagerPage } from '../pages/credentials/PasswordManagerPage';
 import { ClientProjectsPage } from '../pages/project-flow/ClientProjectsPage';
 import { ClientProjectManagementPage } from '../pages/project-flow/ClientProjectManagementPage';
 import { FlowProjectPage } from '../pages/project-flow/FlowProjectPage';
+import { MonthPlanPage } from '../pages/project-flow/MonthPlanPage';
+import { ReviewsPage } from '../pages/project-flow/ReviewsPage';
 import { PipelinesPage } from '../pages/project-flow/PipelinesPage';
 import { EmployeesPage } from '../pages/project-flow/EmployeesPage';
 import { EmployeeDeskPage } from '../pages/project-flow/EmployeeDeskPage';
@@ -52,6 +54,7 @@ import { FinanceReportsPage } from '../pages/finance/FinanceReportsPage';
 import { BillingAlertsPage } from '../pages/finance/BillingAlertsPage';
 import { ExpensesPage } from '../pages/finance/ExpensesPage';
 import { LoansPage } from '../pages/finance/LoansPage';
+import { BorrowedMoneyPage } from '../pages/finance/BorrowedMoneyPage';
 import { AdFundsPage } from '../pages/finance/AdFundsPage';
 import { LeadsBoardPage } from '../pages/sales/LeadsBoardPage';
 import { SalesDeskPage } from '../pages/sales/SalesDeskPage';
@@ -64,6 +67,11 @@ import { PublicProposalPage } from '../pages/sales/PublicProposalPage';
 import { PublicQuotePage } from '../pages/sales/PublicQuotePage';
 import { QuotationsPage } from '../pages/sales/QuotationsPage';
 import { QuoteEditorPage } from '../pages/sales/QuoteEditorPage';
+import MyAvailabilityPage from '../pages/shoots/MyAvailabilityPage';
+import ShootPlannerPage from '../pages/shoots/ShootPlannerPage';
+import VideographerShootsPage from '../pages/shoots/VideographerShootsPage';
+import ClientShootDatesPage from '../pages/shoots/ClientShootDatesPage';
+import { isFreelanceOnly } from '../pages/shoots/shootUi';
 
 /** Clients keep the invoices page; staff use Finance → GST Invoices (and Sales → Quotations). */
 function BillingRoute() {
@@ -71,6 +79,13 @@ function BillingRoute() {
   const { roles } = usePermission();
   const isClient = Boolean(user?.client_id) || (roles || []).some((r) => r.slug === 'client');
   return isClient ? <BillingPage /> : <Navigate to="/finance/invoices" replace />;
+}
+
+/** Freelance videographers have no workspace dashboard: they land on their availability calendar. */
+function DashboardRoute() {
+  const { roles, isLoading } = usePermission();
+  if (isLoading) return null;
+  return isFreelanceOnly(roles) ? <Navigate to="/shoots/availability" replace /> : <DashboardPage />;
 }
 
 export function AppRoutes() {
@@ -91,7 +106,7 @@ export function AppRoutes() {
       {/* Protected Routes */}
       <Route element={<ProtectedRoute />}>
         <Route element={<DashboardLayout />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/dashboard" element={<DashboardRoute />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
           {/* Phase 8: Advanced Reports & Analytics */}
@@ -131,6 +146,22 @@ export function AppRoutes() {
             <Route path="/clients/:id" element={<ClientWorkspacePage />} />
           </Route>
 
+          {/* Video shoots: videographer availability (own) + Shoot Planner (managers) */}
+          <Route element={<PermissionRoute requiredAny={['shoots.availability', 'shoots.manage']} />}>
+            <Route path="/shoots/availability" element={<MyAvailabilityPage />} />
+          </Route>
+          <Route element={<PermissionRoute requiredPermission="shoots.availability" />}>
+            <Route path="/shoots/open" element={<VideographerShootsPage />} />
+            <Route path="/shoots/mine" element={<VideographerShootsPage />} />
+            <Route path="/shoots/payments" element={<VideographerShootsPage />} />
+          </Route>
+          <Route element={<PermissionRoute requiredPermission="shoots.respond" />}>
+            <Route path="/shoot-dates" element={<ClientShootDatesPage />} />
+          </Route>
+          <Route element={<PermissionRoute requiredAny={['shoots.view', 'shoots.manage']} />}>
+            <Route path="/shoots" element={<ShootPlannerPage />} />
+          </Route>
+
           {/* D-Grow OS: Client Monthly Content & Work Calendar */}
           <Route element={<PermissionRoute requiredPermission="calendar.view" />}>
             <Route path="/calendar" element={<CalendarPage />} />
@@ -158,6 +189,7 @@ export function AppRoutes() {
             {/* Client project flow: clients → client projects → pipeline steps */}
             <Route path="/client-projects" element={<ClientProjectsPage />} />
             <Route path="/client-projects/:clientId" element={<ClientProjectManagementPage />} />
+            <Route path="/month-plans/:planId" element={<MonthPlanPage />} />
             <Route path="/project-pipelines" element={<PipelinesPage />} />
           </Route>
 
@@ -168,6 +200,7 @@ export function AppRoutes() {
             <Route path="/employee-tasks/:userId/projects/:projectId" element={<EmployeeProjectTasksPage />} />
             {/* Executives assigned to a step need the project page without projects.view; the API checks access per project. */}
             <Route path="/flow-projects/:id" element={<FlowProjectPage />} />
+            <Route path="/reviews" element={<ReviewsPage />} />
           </Route>
 
           {/* Sales pipeline: leads & follow-ups, meetings, marketers, proposals */}
@@ -206,6 +239,7 @@ export function AppRoutes() {
           <Route element={<PermissionRoute requiredPermission="expenses.view" />}>
             <Route path="/finance/expenses" element={<ExpensesPage />} />
             <Route path="/finance/loans" element={<LoansPage />} />
+            <Route path="/finance/borrowed" element={<BorrowedMoneyPage />} />
           </Route>
           <Route element={<PermissionRoute requiredPermission="adfunds.view" />}>
             <Route path="/finance/ad-funds" element={<AdFundsPage />} />

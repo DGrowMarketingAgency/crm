@@ -1,6 +1,7 @@
 import { pool } from '../../config/db.js';
 import { SERVICES_CATALOG, ROLE_DEPARTMENT_MAP, ROLE_SLUG_MAP } from './workflows.data.js';
 import { AuditService } from '../audit/audit.service.js';
+import { ProjectFlowService } from '../project-flow/projectFlow.service.js';
 
 export class AutoTriggerEngine {
   /**
@@ -94,173 +95,75 @@ export class AutoTriggerEngine {
       throw err;
     }
 
-    const connection = await pool.getConnection();
-    const createdServices = [];
-    const generatedTasks = [];
-
-    try {
-      await connection.beginTransaction();
-
-      for (const serviceType of serviceTypes) {
-        const template = SERVICES_CATALOG[serviceType];
-        if (!template) {
-          const err = new Error(`Unsupported service type: ${serviceType}`);
-          err.status = 400;
-          err.code = 'UNKNOWN_SERVICE_TYPE';
-          throw err;
-        }
-
-        // Check if already active
-        const [existing] = await connection.query(
-          `SELECT id FROM service_instances 
-           WHERE client_id = ? AND service_type = ? AND status = 'active'`,
-          [clientId, serviceType]
-        );
-        if (existing.length > 0) {
-          continue; // skip duplicate active service
-        }
-
-        const firstStage = template.stages[0];
-        const defaultAssigneeId = await this.resolveAssignee(
-          template.ownerRole,
-          clientId,
-          actorUser.id
-        );
-
-        // 1. Resolve master service record & metadata
-        const [svcRows] = await connection.query(
-          'SELECT id, department_id, workflow_preset_id, execution_cycle FROM services WHERE service_code = ?',
-          [serviceType]
-        );
-        const serviceId = svcRows.length > 0 ? svcRows[0].id : null;
-        const deptId = svcRows.length > 0 ? svcRows[0].department_id : null;
-        const wpId = svcRows.length > 0 ? svcRows[0].workflow_preset_id : null;
-
-        // Insert ServiceInstance
-        const [siRes] = await connection.query(
-          `INSERT INTO service_instances (
-            client_id, service_id, service_type, label, project_type, current_stage, owner_user_id,
-            department_id, workflow_preset_id, cycle, status, stage_index, created_by
-          ) VALUES (?, ?, ?, ?, 'Regular', ?, ?, ?, ?, ?, 'active', 0, ?)`,
-          [
-            clientId,
-            serviceId,
-            serviceType,
-            template.label,
-            firstStage.name,
-            defaultAssigneeId,
-            deptId,
-            wpId,
-            template.cycle,
-            actorUser.id
-          ]
-        );
-        const serviceInstanceId = siRes.insertId;
-
-        // 2. Generate stage 0 tasks
-        const dueDate = this.addBusinessDays(new Date(), firstStage.days || 5);
-        let taskIndex = 1;
-
-        for (const t of firstStage.tasks) {
-          const taskTitle = typeof t === 'string' ? t : t.title;
-          const isCr = typeof t === 'object' && Boolean(t.cr);
-          const taskRole = (typeof t === 'object' && t.role) ? t.role : template.ownerRole;
-
-          const taskAssigneeId = await this.resolveAssignee(
-            taskRole,
-            clientId,
-            defaultAssigneeId
-          );
-
-          const taskCode = `DG-${clientId}-${serviceType.slice(0, 3).toUpperCase()}-${Date.now().toString().slice(-4)}${taskIndex++}`;
-
-          const [taskRes] = await connection.query(
-            `INSERT INTO tasks (
-              task_code, title, description, client_id, service_instance_id,
-              source, column_status, status, priority, due_date,
-              is_client_deliverable, assignee_id, creator_id
-            ) VALUES (?, ?, ?, ?, ?, 'Workflow', 'todo', 'todo', 'medium', ?, ?, ?, ?)`,
-            [
-              taskCode,
-              taskTitle,
-              `Auto-generated workflow task for ${template.label} [Stage: ${firstStage.name}]`,
-              clientId,
-              serviceInstanceId,
-              dueDate,
-              isCr ? 1 : 0,
-              taskAssigneeId,
-              actorUser.id
-            ]
-          );
-
-          const taskId = taskRes.insertId;
-
-          // Also insert assignee into task_assignees pivot
-          if (taskAssigneeId) {
-            await connection.query(
-              `INSERT IGNORE INTO task_assignees (task_id, user_id, assigned_by)
-               VALUES (?, ?, ?)`,
-              [taskId, taskAssigneeId, actorUser.id]
-            );
-          }
-
-          generatedTasks.push({
-            id: taskId,
-            task_code: taskCode,
-            title: taskTitle,
-            service_instance_id: serviceInstanceId,
-            column_status: 'todo',
-            is_client_deliverable: isCr,
-            assignee_id: taskAssigneeId,
-            due_date: dueDate
-          });
-        }
-
-        createdServices.push({
-          id: serviceInstanceId,
-          service_code: serviceType,
-          service_type: serviceType,
-          label: template.label,
-          current_stage: firstStage.name,
-          tasks_count: firstStage.tasks.length
-        });
+    // One engine: each bundled service becomes a project in the client's month plan for this month, on that
+    // service's pipeline, and its step tasks spawn immediately (no separate service_instances any more).
+    const items = [];
+    const labels = {};
+    for (const serviceType of serviceTypes) {
+      const [[svc]] = await pool.query(
+        'SELECT id, service_code, name, default_owner_role FROM services WHERE service_code = ? OR id = ?',
+        [String(serviceType), Number(serviceType) || 0]
+      );
+      const template = SERVICES_CATALOG[svc?.service_code || serviceType];
+      if (!svc) {
+        const err = new Error(`Unsupported service type: ${serviceType}`);
+        err.status = 400;
+        err.code = 'UNKNOWN_SERVICE_TYPE';
+        throw err;
       }
-
-      // 3. Advance lifecycle stage if currently L0 or L1 -> advance to L2 (Strategy & Planning)
-      if (['L0', 'L1'].includes(client.lifecycle_stage) && createdServices.length > 0) {
-        await connection.query(
-          `UPDATE clients SET lifecycle_stage = 'L2' WHERE id = ?`,
-          [clientId]
-        );
-      }
-
-      await connection.commit();
-
-      // Audit log
-      await AuditService.log({
-        actorUserId: actorUser.id,
-        action: 'services.bundled',
-        targetType: 'client',
-        targetId: clientId,
-        details: {
-          servicesCount: createdServices.length,
-          tasksCount: generatedTasks.length,
-          serviceTypes
-        },
-        req
-      });
-
-      return {
-        client_id: clientId,
-        bundled_services: createdServices,
-        generated_tasks: generatedTasks
-      };
-    } catch (err) {
-      await connection.rollback();
-      throw err;
-    } finally {
-      connection.release();
+      const assigneeId = await this.resolveAssignee(template?.ownerRole || svc.default_owner_role || 'AccountManager', clientId, actorUser.id);
+      items.push({ serviceId: svc.id, assigneeId });
+      labels[svc.id] = { code: svc.service_code, label: svc.name };
     }
+
+    const result = await ProjectFlowService.addServicesToMonth(clientId, items, actorUser, req);
+
+    // Bundling moves a new client from onboarding into Strategy & Planning.
+    if (['L0', 'L1'].includes(client.lifecycle_stage) && result.project_ids.length > 0) {
+      await pool.query(`UPDATE clients SET lifecycle_stage = 'L2' WHERE id = ?`, [clientId]);
+    }
+
+    const [projects] = result.project_ids.length
+      ? await pool.query(
+          `SELECT p.id, p.name, p.service_id, p.month_plan_id,
+                  (SELECT ps.name FROM project_steps ps WHERE ps.project_id = p.id AND ps.status = 'in_progress' ORDER BY ps.step_order LIMIT 1) AS current_stage
+           FROM projects p WHERE p.id IN (?)`,
+          [result.project_ids]
+        )
+      : [[]];
+    const [tasks] = result.project_ids.length
+      ? await pool.query(
+          `SELECT id, task_code, title, project_id, project_step_id, column_status, is_client_deliverable, assignee_id, DATE_FORMAT(due_date, '%Y-%m-%d') AS due_date
+           FROM tasks WHERE project_id IN (?) ORDER BY id`,
+          [result.project_ids]
+        )
+      : [[]];
+
+    await AuditService.log({
+      actorUserId: actorUser.id,
+      action: 'services.bundled',
+      targetType: 'client',
+      targetId: clientId,
+      details: { serviceTypes, projectIds: result.project_ids, skipped: result.skipped_service_ids, monthPlanId: result.plan_id },
+      req
+    });
+
+    return {
+      client_id: clientId,
+      month_plan_id: result.plan_id,
+      plan_month: result.plan_month,
+      bundled_services: projects.map((p) => ({
+        id: p.id,
+        project_id: p.id,
+        service_code: labels[p.service_id]?.code,
+        service_type: labels[p.service_id]?.code,
+        label: labels[p.service_id]?.label || p.name,
+        current_stage: p.current_stage,
+        tasks_count: tasks.filter((t) => t.project_id === p.id).length
+      })),
+      skipped_service_ids: result.skipped_service_ids,
+      generated_tasks: tasks
+    };
   }
 
   /**
@@ -292,16 +195,22 @@ export class AutoTriggerEngine {
       }
     }
 
+    // Services = the projects in the client's month plans (newest month first), one row per service project.
     const [services] = await pool.query(
-      `SELECT si.*, u.name as owner_name, u.email as owner_email,
-              COUNT(DISTINCT t.id) as total_tasks,
-              SUM(CASE WHEN t.column_status = 'done' OR t.status = 'completed' THEN 1 ELSE 0 END) as completed_tasks
-       FROM service_instances si
-       LEFT JOIN users u ON si.owner_user_id = u.id
-       LEFT JOIN tasks t ON t.service_instance_id = si.id
-       WHERE si.client_id = ?
-       GROUP BY si.id
-       ORDER BY si.created_at DESC`,
+      `SELECT p.id, p.id AS project_id, p.month_plan_id, mp.plan_month, s.service_code AS service_type, s.service_code,
+              COALESCE(s.name, p.name) AS label, p.name AS project_name, p.status,
+              (SELECT ps.name FROM project_steps ps WHERE ps.project_id = p.id AND ps.status = 'in_progress' ORDER BY ps.step_order LIMIT 1) AS current_stage,
+              p.team_leader_id AS owner_user_id, u.name AS owner_name, u.email AS owner_email,
+              COUNT(DISTINCT t.id) AS total_tasks,
+              SUM(CASE WHEN t.column_status = 'done' OR t.status = 'completed' THEN 1 ELSE 0 END) AS completed_tasks
+       FROM projects p
+       JOIN client_month_plans mp ON mp.id = p.month_plan_id
+       LEFT JOIN services s ON s.id = p.service_id
+       LEFT JOIN users u ON u.id = p.team_leader_id
+       LEFT JOIN tasks t ON t.project_id = p.id AND t.is_archived = 0
+       WHERE p.client_id = ? AND p.is_archived = 0 AND p.status <> 'cancelled'
+       GROUP BY p.id
+       ORDER BY mp.plan_month DESC, p.id`,
       [clientId]
     );
 

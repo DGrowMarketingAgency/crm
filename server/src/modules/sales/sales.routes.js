@@ -12,6 +12,20 @@ import {
   quoteSchema, quoteUpdateSchema, quoteReviseSchema, quoteClientRequestSchema, quoteDecideSchema, publicQuoteDecisionSchema, quoteConvertSchema, quoteCancelSchema
 } from './sales.validation.js';
 import { SalesQuotesService as Q } from './salesQuotes.service.js';
+import { renderQuotation } from './quoteTemplate.js';
+import { sendPrintable } from '../finance/documentTemplate.js';
+import { FinanceService } from '../finance/finance.service.js';
+import { env } from '../../config/env.js';
+
+/** Sends a printable quotation (same layout as the agency invoice). */
+const printQuote = (load) => async (req, res, next) => {
+  try {
+    const [data, settings] = await Promise.all([load(req), FinanceService.getSettings()]);
+    sendPrintable(res, renderQuotation(data, settings, env.CLIENT_URL), env.CLIENT_URL);
+  } catch (e) {
+    next(e);
+  }
+};
 
 const router = Router();
 const handle = (fn, status = 200) => async (req, res, next) => {
@@ -37,6 +51,7 @@ publicSalesRouter.post('/proposals/:token/decision', publicLimiter, validate(pub
     return S.publicDecide(String(req.params.token), req.body);
   }));
 
+publicSalesRouter.get('/quotes/:token/print', publicLimiter, printQuote((req) => Q.publicPrintData(String(req.params.token))));
 publicSalesRouter.get('/quotes/:token', publicLimiter, handle(async (req) => Q.publicView(String(req.params.token))));
 publicSalesRouter.post('/quotes/:token/decision', publicLimiter, validate(publicQuoteDecisionSchema),
   handle(async (req) => Q.publicDecide(String(req.params.token), req.body)));
@@ -52,6 +67,7 @@ router.use('/sales', authenticate, (req, res, next) => {
 router.get('/sales/dashboard', requirePermission('leads.view'), handle(async (req) => S.dashboard(req.user, req.query)));
 // Quotations: marketing people request (no prices); admins price, send, revise and close.
 router.get('/sales/quotes', requirePermission('sales_quotes.view'), handle(async (req) => Q.list(req.user, req.query)));
+router.get('/sales/quotes/:id/print', requirePermission('sales_quotes.view'), printQuote((req) => Q.printData(id(req), req.user)));
 router.get('/sales/quotes/:id', requirePermission('sales_quotes.view'), handle(async (req) => Q.get(id(req), req.user)));
 router.post('/sales/quotes', requirePermission(['sales_quotes.request', 'sales_quotes.price']), csrfProtection, validate(quoteSchema),
   handle(async (req) => Q.create(req.body, req.user, req), 201));

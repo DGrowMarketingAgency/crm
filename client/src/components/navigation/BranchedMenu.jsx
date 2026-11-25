@@ -263,6 +263,14 @@ export default function BranchedMenu({
                           >
                             {kid.label}
                           </span>
+                          {kid.badge > 0 && (
+                            <span
+                              className="ml-auto shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-amber-400 text-slate-900 text-[11px] font-black inline-flex items-center justify-center"
+                              aria-label={`${kid.badge} waiting`}
+                            >
+                              {kid.badge > 99 ? '99+' : kid.badge}
+                            </span>
+                          )}
                         </button>
                       );
                     })}
